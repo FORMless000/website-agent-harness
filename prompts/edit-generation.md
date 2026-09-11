@@ -1,0 +1,1 @@
+Edit the current website according to the newest user message. Current code is included in full and the full conversation is available. Preserve details not affected by the requested edit. Submit a complete replacement HTML document and CSS, even for a small change. Use existing local assets where appropriate. Never emit patches or an incomplete fragment.

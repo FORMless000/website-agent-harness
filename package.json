@@ -1,0 +1,39 @@
+{
+  "name": "vibenet-website-agent-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.20"
+  },
+  "bin": {
+    "harness": "dist/cli.js"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts serve",
+    "harness": "tsx src/cli.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "test:browser": "playwright test",
+    "smoke:models": "tsx scripts/smoke-models.ts",
+    "lint": "prettier --check src tests scripts web prompts docs *.json *.md *.ts",
+    "format": "prettier --write src tests scripts web prompts docs *.json *.md *.ts"
+  },
+  "dependencies": {
+    "@openrouter/agent": "0.11.0",
+    "@openrouter/sdk": "0.13.67",
+    "css-tree": "3.2.1",
+    "ipaddr.js": "2.2.0",
+    "parse5": "8.0.1",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/css-tree": "3.2.0",
+    "@types/node": "20.19.43",
+    "prettier": "3.6.2",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
+  }
+}

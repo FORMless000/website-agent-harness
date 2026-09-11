@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Vibenet · Website laboratory</title>
+    <link rel="stylesheet" href="/_harness/style.css" />
+    <script type="module" src="/_harness/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/_harness/"
+        >vibe<span>net</span><small>WEBSITE LABORATORY</small></a
+      >
+      <div id="settings" class="muted"></div>
+      <button id="prompt-toggle">Edit system prompts</button>
+    </header>
+    <p id="notice" role="status" hidden></p>
+    <main>
+      <aside class="sidebar">
+        <div class="section-heading">
+          <h2>Experiments</h2>
+          <button id="new-session" class="small">＋ New</button>
+        </div>
+        <form id="create-form">
+          <label
+            >Sub-URL <span>required</span
+            ><input
+              name="path"
+              placeholder="/a-museum-of-small-things"
+              required
+              pattern="/.*"
+          /></label>
+          <label
+            >Reasoning model
+            <select name="model" id="model" required>
+              <option value="">Choose a model…</option>
+            </select></label
+          >
+          <label
+            >Reasoning effort
+            <select name="effort" id="effort">
+              <option value="high">high</option>
+            </select></label
+          >
+          <label
+            >Description <span>optional · anything to explore</span
+            ><textarea
+              name="description"
+              rows="4"
+              placeholder="An eerie museum catalog, a playful pricing page, a microscopic newspaper…"
+            ></textarea>
+          </label>
+          <label
+            >Parent page URL <span>optional</span
+            ><input
+              name="parentUrl"
+              type="url"
+              placeholder="https://example.com/page"
+          /></label>
+          <p class="hint">
+            Captures HTML and direct same-origin CSS. The parent page is
+            reference data, not executed code.
+          </p>
+          <button type="submit" id="generate" class="primary">
+            Generate website <span>↗</span>
+          </button>
+        </form>
+        <div id="sessions" aria-label="Saved sessions"></div>
+        <p class="footnote">
+          HTML + CSS. No generated JavaScript.<br />No history compaction or
+          token cap.<br />Provider limits and charges still apply.
+        </p>
+      </aside>
+      <section class="workspace">
+        <div id="empty" class="empty">
+          <div class="eyebrow">AN OPEN-ENDED CANVAS</div>
+          <h1>What lives<br />at this URL?</h1>
+          <p>
+            Start with a path. Give it a world.<br />Then reshape it, one
+            conversation at a time.
+          </p>
+          <div class="example-paths">
+            <code>/tomorrow/weather</code><code>/the-last-bookshop</code
+            ><code>/tiny-internet</code>
+          </div>
+        </div>
+        <div id="experiment" hidden>
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow" id="session-model"></div>
+              <h1 id="page-path"></h1>
+            </div>
+            <a id="open-page" target="_blank" rel="noopener">Open page ↗</a>
+          </div>
+          <div class="toolbar">
+            <div>
+              <label class="inline"
+                >Version
+                <select id="versions" aria-label="Version"></select></label
+              ><span id="version-info" class="muted"></span>
+            </div>
+            <div class="tabs" role="group" aria-label="Page view">
+              <button data-view="preview" aria-pressed="true">Preview</button
+              ><button data-view="html" aria-pressed="false">HTML</button
+              ><button data-view="css" aria-pressed="false">CSS</button
+              ><button data-view="served" aria-pressed="false">
+                Served HTML
+              </button>
+            </div>
+          </div>
+          <div class="preview">
+            <iframe
+              id="preview"
+              title="Generated website preview"
+              sandbox="allow-same-origin"
+            ></iframe>
+            <pre id="source" hidden></pre>
+            <div id="no-version" class="muted">
+              The first accepted version will appear here.
+            </div>
+          </div>
+          <section class="conversation">
+            <div class="section-heading">
+              <h2>Conversation</h2>
+              <span id="run-status" class="badge">Ready</span>
+            </div>
+            <div id="messages"></div>
+            <form id="chat-form">
+              <textarea
+                name="message"
+                id="message"
+                rows="2"
+                placeholder="Describe a change. The full session stays in context."
+                required
+              ></textarea>
+              <div>
+                <button id="cancel-run" type="button" hidden>Stop run</button
+                ><button id="send" class="primary" type="submit">
+                  Send edit ↗
+                </button>
+              </div>
+            </form>
+          </section>
+          <section class="inspector">
+            <div class="section-heading">
+              <h2>Inside the run</h2>
+              <div>
+                <select id="runs" aria-label="Run"></select
+                ><button id="download-trace" class="small">
+                  Download trace
+                </button>
+              </div>
+            </div>
+            <p class="hint">
+              Provider-exposed reasoning or summaries only—not hidden internal
+              thoughts. Exact requests, tool calls, validation, and usage are
+              preserved.
+            </p>
+            <div class="tabs">
+              <button data-inspector="timeline" aria-pressed="true">
+                Timeline</button
+              ><button data-inspector="reasoning" aria-pressed="false">
+                Reasoning / text</button
+              ><button data-inspector="context" aria-pressed="false">
+                Exact context</button
+              ><button data-inspector="usage" aria-pressed="false">Usage</button
+              ><button data-inspector="state" aria-pressed="false">
+                SDK state
+              </button>
+            </div>
+            <pre id="trace" tabindex="0">No run selected.</pre>
+            <p id="trace-note" class="hint"></p>
+          </section>
+        </div>
+      </section>
+    </main>
+    <dialog id="prompts-dialog">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">EDITABLE INSTRUCTIONS</div>
+          <h2>System prompt structure</h2>
+        </div>
+        <button id="close-prompts" aria-label="Close prompts">✕</button>
+      </div>
+      <p class="hint">
+        system.md + initial-generation.md or edit-generation.md + assets.md.
+        Changes affect future runs, including future edits of existing sessions.
+        Every run records its own snapshot. Validation rules remain enforced in
+        code.
+      </p>
+      <label
+        >Prompt file
+        <select id="prompt-file"></select></label
+      ><textarea
+        id="prompt-content"
+        rows="18"
+        spellcheck="false"
+        aria-label="Prompt source"
+      ></textarea>
+      <div class="dialog-footer">
+        <span id="prompt-status" role="status"></span
+        ><button id="save-prompt" class="primary">Save prompt</button>
+      </div>
+    </dialog>
+  </body>
+</html>

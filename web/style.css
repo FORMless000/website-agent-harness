@@ -1,0 +1,518 @@
+:root {
+  color-scheme: light;
+  --paper: #f7f6f2;
+  --ink: #282a27;
+  --muted: #73756d;
+  --line: #dddfd6;
+  --accent: #d7562d;
+  --white: #fff;
+  --soft: #eceee5;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 14px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button,
+a,
+input,
+textarea,
+select {
+  outline-offset: 4px;
+}
+button {
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 12px;
+}
+button:hover {
+  background: var(--soft);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+a {
+  color: var(--accent);
+}
+header {
+  height: 82px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  justify-content: space-between;
+  padding: 0 30px;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-size: 28px;
+  letter-spacing: -1.5px;
+  text-decoration: none;
+  font-weight: 750;
+  color: var(--ink);
+}
+.brand span {
+  color: var(--accent);
+}
+.brand small {
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  display: block;
+  margin-top: 2px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.muted,
+.hint,
+.footnote {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hint {
+  margin: 8px 0 16px;
+}
+.footnote {
+  margin-top: 30px;
+  font-size: 11px;
+  line-height: 1.9;
+}
+.sidebar {
+  border-right: 1px solid var(--line);
+  padding: 24px;
+  width: 320px;
+  flex-shrink: 0;
+}
+main {
+  display: flex;
+  min-height: calc(100vh - 82px);
+}
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.section-heading h2 {
+  font-size: 15px;
+  margin: 0;
+  font-weight: 650;
+}
+.section-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.small {
+  font-size: 12px;
+  padding: 5px 8px;
+}
+.primary {
+  background: var(--ink);
+  color: var(--white);
+  border-color: var(--ink);
+}
+.primary:hover {
+  background: #44483d;
+}
+.primary span {
+  float: right;
+}
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 15px 0;
+}
+label span {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 10px;
+}
+input,
+textarea,
+select {
+  width: 100%;
+  display: block;
+  margin-top: 7px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 10px;
+  color: var(--ink);
+  min-width: 0;
+}
+textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #92958a;
+  font-size: 12px;
+}
+#generate {
+  width: 100%;
+  text-align: left;
+  margin-top: 6px;
+}
+#sessions {
+  margin-top: 26px;
+  display: grid;
+  gap: 8px;
+}
+.session {
+  display: block;
+  text-align: left;
+  padding: 12px;
+  border-color: transparent;
+  overflow-wrap: anywhere;
+}
+.session.active {
+  background: var(--soft);
+  border-color: var(--line);
+}
+.session strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+.session small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.workspace {
+  padding: 34px;
+  flex: 1;
+  min-width: 0;
+}
+.empty {
+  max-width: 750px;
+  margin: 11vh auto;
+  padding: 30px;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.empty h1 {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(48px, 6vw, 88px);
+  letter-spacing: -4px;
+  line-height: 1.05;
+  margin: 25px 0;
+}
+.empty p {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.8;
+}
+.example-paths {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 40px;
+}
+.example-paths code {
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+.page-heading h1 {
+  font-size: 26px;
+  letter-spacing: -0.7px;
+  font-weight: 550;
+  margin: 9px 0;
+  overflow-wrap: anywhere;
+}
+.page-heading a {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 12px 0;
+  flex-wrap: wrap;
+}
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.inline select {
+  width: auto;
+  margin: 0;
+  padding: 6px;
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.tabs button {
+  font-size: 11px;
+  border-color: transparent;
+  padding: 6px 9px;
+}
+.tabs button[aria-pressed="true"] {
+  background: var(--soft);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.preview {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  min-height: 350px;
+}
+.preview iframe {
+  width: 100%;
+  height: 520px;
+  display: block;
+  border: 0;
+  background: #fff;
+}
+.preview pre {
+  margin: 0;
+  max-height: 520px;
+  min-height: 350px;
+  padding: 20px;
+  overflow: auto;
+  font:
+    12px/1.7 ui-monospace,
+    SFMono-Regular,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#no-version {
+  padding: 80px;
+  text-align: center;
+}
+.conversation,
+.inspector {
+  margin-top: 30px;
+}
+.badge {
+  font:
+    10px ui-monospace,
+    monospace;
+  text-transform: uppercase;
+  background: var(--soft);
+  padding: 6px 9px;
+  border-radius: 5px;
+}
+.badge.running {
+  color: var(--accent);
+}
+#messages {
+  max-height: 360px;
+  overflow: auto;
+}
+.message {
+  padding: 13px 0;
+  border-top: 1px solid var(--line);
+  line-height: 1.6;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.message .role {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+#chat-form > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+#trace {
+  font:
+    11px/1.7 ui-monospace,
+    SFMono-Regular,
+    monospace;
+  background: #242923;
+  color: #d6dfcd;
+  border-radius: 8px;
+  padding: 20px;
+  min-height: 180px;
+  max-height: 450px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.inspector select {
+  width: auto;
+  max-width: 230px;
+  font-size: 11px;
+  margin: 0;
+  padding: 6px;
+}
+#notice {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0;
+  background: #fff0df;
+  border-bottom: 1px solid #e6c6a9;
+  padding: 12px 30px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+dialog {
+  width: min(900px, 92vw);
+  max-height: 90vh;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 25px;
+  background: var(--paper);
+}
+dialog::backdrop {
+  background: #141a1459;
+  backdrop-filter: blur(3px);
+}
+dialog .section-heading > div {
+  display: block;
+}
+dialog h2 {
+  margin-top: 8px !important;
+  font-size: 22px !important;
+}
+#prompt-content {
+  font:
+    12px/1.65 ui-monospace,
+    monospace;
+}
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+#prompt-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 1000px) {
+  .sidebar {
+    width: 280px;
+    padding: 20px;
+  }
+  .workspace {
+    padding: 22px;
+  }
+  header {
+    padding: 0 20px;
+    gap: 12px;
+  }
+  #settings {
+    max-width: 280px;
+    font-size: 10px;
+  }
+  .toolbar {
+    gap: 8px;
+  }
+  .inspector .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .empty {
+    padding: 10px;
+  }
+  .empty h1 {
+    letter-spacing: -2px;
+  }
+}
+@media (max-width: 700px) {
+  header {
+    height: auto;
+    min-height: 76px;
+    flex-wrap: wrap;
+    padding: 15px;
+  }
+  #settings {
+    order: 3;
+    max-width: none;
+    width: 100%;
+  }
+  main {
+    display: block;
+  }
+  .sidebar {
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  #sessions {
+    max-height: 180px;
+    overflow: auto;
+  }
+  .footnote {
+    margin: 12px 0;
+  }
+  .workspace {
+    padding: 20px;
+  }
+  .empty {
+    margin: 20px 0 60px;
+  }
+  .page-heading h1 {
+    font-size: 22px;
+  }
+  .preview iframe {
+    height: 450px;
+  }
+  .inspector select {
+    max-width: 160px;
+  }
+  .page-heading {
+    gap: 8px;
+  }
+}
