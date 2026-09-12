@@ -34,7 +34,12 @@ test("parent capture respects redirects, document base, case-insensitive rel, de
   assert.equal(snapshot.sha256, hash(html));
   assert.equal(snapshot.finalUrl, "https://example.com/redirected/page");
   assert.deepEqual(snapshot.stylesheets, [
-    { url: "https://example.com/assets/theme.css", css, sha256: hash(css) },
+    {
+      url: "https://example.com/assets/theme.css",
+      sourceUrl: "https://example.com/assets/theme.css",
+      css,
+      sha256: hash(css),
+    },
   ]);
   assert.equal(requests.length, 3);
   assert.equal(requests[2]!.limit, 1048576 - Buffer.byteLength(css));

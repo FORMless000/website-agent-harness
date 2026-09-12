@@ -9,9 +9,12 @@ import { z } from "zod";
 import { Harness } from "./harness.js";
 import { MODEL_REGISTRY } from "./models.js";
 import { publicConfig } from "./config.js";
-import { normalizePath } from "./contracts.js";
+import { normalizePath, referenceIdSchema } from "./contracts.js";
+import { parse, serialize } from "parse5";
+import { walk } from "./network.js";
 import { redact } from "./agent.js";
 import { SITE_CSP } from "./validation.js";
+import { indexDescriptions } from "./descriptions.js";
 
 const DASHBOARD_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
@@ -68,6 +71,7 @@ export function createHttpServer(harness: Harness) {
         "/_harness/": ["index.html", "text/html"],
         "/_harness": ["index.html", "text/html"],
         "/_harness/app.js": ["app.js", "text/javascript"],
+        "/_harness/population.js": ["population.js", "text/javascript"],
         "/_harness/style.css": ["style.css", "text/css"],
       };
       if (staticFiles[route] && method === "GET") {
@@ -82,11 +86,102 @@ export function createHttpServer(harness: Harness) {
         return json(response, {
           config: publicConfig(harness.config),
           models: MODEL_REGISTRY,
-          sessions: await harness.store.sessions(),
+          descriptions: await indexDescriptions(harness.store),
+          sessions: (await harness.store.sessions()).filter((session) => {
+            const filter = url.searchParams.get("filter") ?? "all";
+            return filter === "archived"
+              ? !!session.archived
+              : filter === "active"
+                ? !session.archived
+                : true;
+          }),
           active: [...harness.active.values()].map((a) => a.runId),
         });
       if (route === "/api/models" && method === "GET")
         return json(response, await harness.capabilities());
+      if (route === "/api/populations" && method === "POST")
+        return json(
+          response,
+          await harness.populations.start(await body(request)),
+          202,
+        );
+      const populationRoute =
+        /^\/api\/populations\/([\w-]+)(?:\/(events|trace|cancel))?$/.exec(
+          route,
+        );
+      if (populationRoute) {
+        const [, id, action] = populationRoute;
+        if (method === "POST" && action === "cancel") {
+          harness.populations.active.get(id)?.abort();
+          return json(response, { cancelled: true });
+        }
+        const record = await harness.populations.get(id);
+        if (method === "GET" && !action)
+          return json(response, redact(record, harness.config.apiKey));
+        if (method === "GET" && action === "trace") {
+          response.setHeader(
+            "Content-Disposition",
+            `attachment; filename="population-${id}.json"`,
+          );
+          return json(response, {
+            record: redact(record, harness.config.apiKey),
+            events: await harness.populations.events(id),
+          });
+        }
+        if (method === "GET" && action === "events") {
+          response.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+          });
+          let last = Number(request.headers["last-event-id"] ?? 0),
+            closed = false,
+            busy = false;
+          const poll = async () => {
+            if (closed || busy) return;
+            busy = true;
+            try {
+              for (const event of await harness.populations.events(id))
+                if (event.seq > last) {
+                  last = event.seq;
+                  response.write(
+                    `id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`,
+                  );
+                }
+              const current = await harness.populations.get(id);
+              if (current.status !== "running") {
+                // Also finish clients after restart or between record save and final-event append.
+                response.write(
+                  `data: ${JSON.stringify({ seq: last + 1, at: current.finishedAt, type: "population.end", data: redact(current, harness.config.apiKey) })}\n\n`,
+                );
+                response.end();
+              }
+            } catch {
+              response.end();
+            } finally {
+              busy = false;
+            }
+          };
+          const timer = setInterval(() => void poll(), 500);
+          response.on("close", () => {
+            closed = true;
+            clearInterval(timer);
+          });
+          await poll();
+          return;
+        }
+      }
+      if (route === "/api/prepare" && method === "POST")
+        return json(
+          response,
+          await harness.prepareContext(await body(request)),
+        );
+      if (route === "/api/ancestor" && method === "POST")
+        return json(
+          response,
+          await harness.oldestAncestor(
+            referenceIdSchema.parse(await body(request)),
+          ),
+        );
       if (route === "/api/prompts" && method === "GET")
         return json(response, await harness.prompts.list());
       if (route.startsWith("/api/prompts/") && method === "PUT") {
@@ -104,11 +199,18 @@ export function createHttpServer(harness: Harness) {
       if (route === "/api/sessions" && method === "POST")
         return json(response, await harness.create(await body(request)), 201);
       const sessionRoute =
-        /^\/api\/sessions\/([\w-]+)(?:\/(turns|versions|state)(?:\/([\w-]+))?)?$/.exec(
+        /^\/api\/sessions\/([\w-]+)(?:\/(turns|versions|state|archive)(?:\/([\w-]+))?)?$/.exec(
           route,
         );
       if (sessionRoute) {
         const [, id, kind, versionId] = sessionRoute;
+        if (method === "POST" && kind === "archive") {
+          const input = z
+            .object({ versionId: z.string().regex(/^[\w-]+$/) })
+            .strict()
+            .parse(await body(request));
+          return json(response, await harness.archive(id!, input.versionId));
+        }
         if (method === "GET" && !kind)
           return json(response, {
             session: await harness.store.session(id!),
@@ -224,7 +326,47 @@ export function createHttpServer(harness: Harness) {
         );
         return;
       }
-      if (method === "GET" && !/^\/(api|_harness|_assets)(\/|$)/.test(route)) {
+      if (method === "GET" && route.startsWith("/_archive/")) {
+        const match = /^\/_archive\/([\w-]+)\/([\w-]+)(\/.*)$/.exec(
+          decodeURI(route),
+        );
+        if (!match)
+          return json(response, { error: "Invalid archive URL" }, 404);
+        const session = await harness.store.session(match[1]);
+        if (!session.archived || session.archived.url !== decodeURI(route))
+          return json(response, { error: "Archive not found" }, 404);
+        const version = await harness.store.version(match[1], match[2]);
+        const document = parse(version.servedHtml);
+        // Rebase only navigation, without modifying immutable stored HTML or CSP.
+        walk(document, (node) => {
+          if (
+            !("tagName" in node) ||
+            (node.tagName !== "a" && node.tagName !== "area")
+          )
+            return;
+          for (const a of node.attrs)
+            if (a.name === "href" && !a.value.startsWith("#")) {
+              try {
+                const resolved = new URL(
+                  a.value,
+                  `http://127.0.0.1:${harness.config.port}${session.path}`,
+                );
+                a.value =
+                  resolved.origin === `http://127.0.0.1:${harness.config.port}`
+                    ? resolved.pathname + resolved.search + resolved.hash
+                    : resolved.href;
+              } catch {}
+            }
+        });
+        response.setHeader("Content-Type", "text/html; charset=utf-8");
+        response.setHeader("Content-Security-Policy", SITE_CSP);
+        response.end(serialize(document));
+        return;
+      }
+      if (
+        method === "GET" &&
+        !/^\/(api|_harness|_assets|_archive)(\/|$)/.test(route)
+      ) {
         const session = await harness.store.byPath(normalizePath(route));
         if (session?.currentVersion) {
           const version = await harness.store.version(
@@ -267,6 +409,13 @@ export function createHttpServer(harness: Harness) {
 // One server per data directory; a live PID is never displaced. Stale locks
 // from a crashed process can be reclaimed, but old session data is retained.
 export async function serve(harness: Harness) {
+  const collisions = (await harness.store.sessions()).filter(
+    (s) => !s.archived && /^\/_archive(\/|$)/.test(s.path),
+  );
+  if (collisions.length)
+    throw new Error(
+      `Archive namespace conflicts with existing pages: ${collisions.map((s) => s.path).join(", ")}. Resolve explicitly before starting.`,
+    );
   await mkdir(harness.config.dataDir, { recursive: true });
   const lock = path.join(harness.config.dataDir, "server.lock");
   try {

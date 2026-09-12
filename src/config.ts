@@ -20,6 +20,8 @@ export interface Config {
   imageModel: string;
   maxAssets: number;
   maxSteps: number;
+  populationSearches: number;
+  populationSearchResults: number;
   timeoutMs: number;
 }
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -43,6 +45,11 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     imageModel: process.env.HARNESS_IMAGE_MODEL ?? "openai/gpt-5-image",
     maxAssets: integer(process.env.HARNESS_MAX_ASSETS_PER_RUN, 4),
     maxSteps: integer(process.env.HARNESS_MAX_STEPS, 8),
+    populationSearches: integer(process.env.HARNESS_POPULATION_SEARCHES, 2),
+    populationSearchResults: Math.min(
+      25,
+      integer(process.env.HARNESS_POPULATION_SEARCH_RESULTS, 5),
+    ),
     timeoutMs: integer(process.env.HARNESS_RUN_TIMEOUT_MS, 600_000),
     ...overrides,
   };

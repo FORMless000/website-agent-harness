@@ -218,6 +218,7 @@ export async function captureParent(
       remaining -= css.body.length;
       snapshot.stylesheets.push({
         url: css.url,
+        sourceUrl: link,
         css: css.body.toString("utf8"),
         sha256: hash(css.body),
       });

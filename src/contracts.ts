@@ -28,7 +28,7 @@ export function normalizePath(value: string): string {
   if (
     !result ||
     result.includes("//") ||
-    /^\/(?:_harness|_assets|api)(?:\/|$)/.test(result)
+    /^\/(?:_harness|_assets|_archive|api)(?:\/|$)/.test(result)
   )
     throw new Error("This path is reserved; choose a non-root page path.");
   return result;
@@ -49,21 +49,111 @@ export const artifactSchema = z
   })
   .strict();
 export type Artifact = z.infer<typeof artifactSchema>;
+export const styledArtifactSchema = artifactSchema
+  .extend({
+    schemaVersion: z.literal(2),
+    style: z
+      .object({
+        mode: z.enum(["reuse", "extend", "new"]),
+        rationale: z.string().min(1).max(1000),
+      })
+      .strict(),
+  })
+  .strict();
+export type StyledArtifact = z.infer<typeof styledArtifactSchema>;
+export const describedArtifactSchema = styledArtifactSchema.extend({
+  schemaVersion: z.literal(3),
+  pageDescription: z
+    .string()
+    .trim()
+    .min(1)
+    .describe(
+      "Concise description of the submitted page's subject, purpose, content, visual identity and principal navigation; describe the actual page, not the requested brief.",
+    ),
+});
+export const compressionSchema = z.enum([
+  "clean",
+  "structure",
+  "relevant",
+  "brief",
+]);
+export type Compression = z.infer<typeof compressionSchema>;
+export const referenceIdSchema = z
+  .object({
+    sessionId: z.string().regex(/^[\w-]+$/),
+    versionId: z.string().regex(/^[\w-]+$/),
+  })
+  .strict();
+export type ReferenceId = z.infer<typeof referenceIdSchema>;
+export interface StyleRecord {
+  mode: "reuse" | "extend" | "new";
+  rationale: string;
+  authoredCss: string | null;
+  resolvedCss: string | null;
+  base?: ReferenceId;
+}
+export const parentContextModeSchema = z.enum(["full", "compact"]);
+export type ParentContextMode = z.infer<typeof parentContextModeSchema>;
 export const createSchema = z
   .object({
     path: z.string().transform(normalizePath),
     description: z.string().default(""),
+    populatedBrief: z.string().default(""),
+    populationId: z
+      .string()
+      .regex(/^[\w-]+$/)
+      .optional(),
     parentUrl: z.string().default(""),
+    parentContextMode: parentContextModeSchema.optional(),
     model: z.union([z.string(), z.number()]),
     effort: effortSchema.default("high"),
+    internalReference: referenceIdSchema.nullable().optional(),
+    internalCompression: compressionSchema.optional(),
+    externalReferences: z
+      .array(
+        z
+          .object({
+            url: z.string().url(),
+            compression: compressionSchema.default("clean"),
+          })
+          .strict(),
+      )
+      .optional(),
+    preparationId: z
+      .string()
+      .regex(/^[\w-]+$/)
+      .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((v, ctx) => {
+    if (
+      (v.parentUrl || v.parentContextMode !== undefined) &&
+      (v.internalReference !== undefined ||
+        v.internalCompression !== undefined ||
+        v.externalReferences !== undefined ||
+        v.preparationId)
+    )
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Use legacy parentUrl/parentContextMode or new reference fields, not both.",
+      });
+  })
+  .transform((v) => ({
+    ...v,
+    parentContextMode: v.parentContextMode ?? "full",
+  }));
 export interface ParentSnapshot {
   url: string;
   finalUrl: string;
   capturedAt: string;
   html: string;
-  stylesheets: { url: string; css: string; sha256: string }[];
+  stylesheets: {
+    url: string;
+    sourceUrl?: string;
+    css: string;
+    sha256: string;
+  }[];
   sha256: string;
   warnings: string[];
   localVersion?: string;
@@ -85,6 +175,9 @@ export interface Asset {
   usage?: unknown;
 }
 export interface Version {
+  pageDescription?: string;
+  style?: StyleRecord;
+  generationParent?: ReferenceId;
   id: string;
   runId: string;
   createdAt: string;
@@ -93,6 +186,15 @@ export interface Version {
   assets: Asset[];
 }
 export interface Session {
+  submissionVersion?: 3;
+  populationId?: string;
+  populatedBrief?: string;
+  contextVersion?: 1 | 2;
+  preparationId?: string;
+  referenceRequest?: z.infer<typeof createSchema>;
+  generationParent?: ReferenceId;
+  archived?: { at: string; versionId: string; url: string };
+  parentContextMode?: ParentContextMode;
   id: string;
   path: string;
   description: string;

@@ -1,0 +1,1 @@
+Use schemaVersion 3. In the same website submission include pageDescription: a concise factual description of the completed page's subject, purpose, content, visual identity and principal navigation. Describe what you actually submitted, not merely what was requested. Update the complete description on edits. No separate summary call is needed.

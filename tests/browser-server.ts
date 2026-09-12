@@ -18,7 +18,36 @@ const fetcher = mockTransport([
   [submission(artifact("Mobile museum"), "mobile")],
 ]);
 const server = await serve(
-  new Harness(config, createDriver(fetcher), async () => catalog),
+  new Harness(
+    config,
+    createDriver(fetcher),
+    async () => catalog,
+    async (_config, record, signal, emit) => {
+      await emit("request", { body: { input: record.context } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      signal.throwIfAborted();
+      await emit("usage", { inputTokens: 100, outputTokens: 40 });
+      return {
+        brief: "A playful fixture brief.",
+        similarity: "insufficient_evidence",
+        rationale: "Fixture evidence",
+        relevantNeighbors: [],
+        externalReferences: [
+          {
+            url: "https://example.org/reference",
+            reason: "Fixture reference",
+            provenance: "Mocked search",
+          },
+        ],
+        referenceRecommendation: {
+          action: record.input.allowReferenceSuggestions ? "clear" : "retain",
+          reference: null,
+          rationale: "Fixture choice",
+        },
+        warnings: [],
+      };
+    },
+  ),
 );
 process.on("SIGTERM", () => void server.close());
 process.on("SIGINT", () => void server.close());

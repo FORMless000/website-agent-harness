@@ -52,7 +52,9 @@ export class Store {
     );
   }
   async byPath(pagePath: string) {
-    return (await this.sessions()).find((s) => s.path === pagePath);
+    return (await this.sessions()).find(
+      (s) => s.path === pagePath && !s.archived,
+    );
   }
   async saveRun(run: Run) {
     await atomicWrite(this.file("runs", run.id), JSON.stringify(run, null, 2));

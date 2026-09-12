@@ -6,6 +6,9 @@ export const PROMPT_NAMES = [
   "initial-generation.md",
   "edit-generation.md",
   "assets.md",
+  "style-decision.md",
+  "population.md",
+  "page-description.md",
 ] as const;
 export class Prompts {
   private saving = false;

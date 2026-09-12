@@ -281,6 +281,16 @@ textarea::placeholder {
   margin: 0;
   padding: 6px;
 }
+#request-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+#readable-strings {
+  width: auto;
+  margin: 0;
+}
 .tabs {
   display: flex;
   gap: 4px;
@@ -440,6 +450,18 @@ dialog h2 {
 [hidden] {
   display: none !important;
 }
+#preparation-summary {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 28rem;
+  overflow-y: auto;
+}
+#style-decision,
+#context-stats,
+#cache-stats {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 1000px) {
   .sidebar {
     width: 280px;
@@ -515,4 +537,18 @@ dialog h2 {
   .page-heading {
     gap: 8px;
   }
+}
+:is(
+  #population-trace,
+  #population-status,
+  #population-proposals,
+  #page-description
+) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+#population-trace {
+  max-height: 24rem;
+  overflow: auto;
 }

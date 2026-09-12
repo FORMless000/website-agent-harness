@@ -25,6 +25,7 @@
     "@openrouter/sdk": "0.13.67",
     "css-tree": "3.2.1",
     "ipaddr.js": "2.2.0",
+    "js-tiktoken": "1.0.21",
     "parse5": "8.0.1",
     "zod": "4.5.4"
   },

@@ -99,6 +99,20 @@ Composition is `system.md` + the applicable generation/edit file + `assets.md`. 
 
 Local parent URLs at this server's origin resolve directly to the stored artifact/version and its assets. Public parent URLs capture up to 1 MiB of HTML and up to 1 MiB total of the first eight direct same-origin CSS links. JavaScript-rendered DOM, CSS imports, and third-party resources are not evaluated or crawled. Snapshots include timestamps, hashes, final URLs, and omissions/errors. Parent text and image-search metadata are treated as untrusted reference data.
 
+### Initial context and parent modes
+
+New sessions send common system/asset rules, then creation instructions, followed by ordered user text blocks: parent source, available assets, and finally the target path and optional description (once). Retrieval timestamps, hashes, internal IDs and asset usage stay in local records rather than model-facing text. HTML/CSS are literal text, not JSON encoded inside another string. Existing sessions and their SDK histories are not migrated or compacted; edits retain their existing behavior.
+
+Legacy API/CLI callers can still choose **Full source** (default) or **Compact structure + full CSS** using `parentContextMode: "full" | "compact"` or `--parent-context compact`. These saved transformations are not rewritten. The current interface uses the four levels below.
+
+- Full source removes comments, executable scripts and event attributes, while retaining declarative data and styling. HTML parser normalization may slightly increase its size.
+- Compact mode additionally shortens ordinary text to 160 characters, keeps three consecutive repeated tag/class subtrees, and replaces SVG geometry/embedded image payloads with annotated placeholders. Headings, navigation, labels and whitespace-sensitive text are preserved. CSS remains complete and in source order, including inline styles. This deterministic transformation is lossy and makes no LLM call; CSS-heavy pages may see limited savings.
+- Each new initial run with a parent stores a versioned `parent-context.json` alongside its trace. The original session snapshot remains intact. Extraction failures record a warning and fall back to full source. Counts include the reference labels/URLs and use JavaScript string length, not token estimates. Parent retrieval is still fresh at session creation; no network cache is introduced.
+
+Reusable blocks precede the child-specific task. Compatible OpenAI/Anthropic requests mark a cache boundary; DeepSeek/Z.AI rely on automatic caching. Anthropic requests without a reference enable top-level automatic caching. A content-derived `x-session-id` groups requests with the same model, instructions, tool schemas and reference for best-effort provider affinity; normal provider fallback is retained. This grouping spans sibling-page sessions, not just one harness chat. No TTL extension or provider pinning is forced.
+
+The inspector reports the preparation mode, character counts and cache-read/write tokens supplied by the provider. Missing metrics say **not reported**. “Eligible for reuse” is not a cache-hit guarantee: minimum prefix lengths, expiry and routing still apply. No live cache-hit or latency improvement has been verified by the offline tests. See [OpenRouter prompt caching](https://openrouter.ai/docs/guides/best-practices/prompt-caching).
+
 Openverse searches request CC0 or CC BY results, then import a returned image ID's thumbnail. Attribution is inserted automatically and cannot be removed by a model's HTML edit. Search metadata can be wrong: inspect the original source and verify license/attribution terms before reusing images. Generated assets use OpenRouter's `/images` endpoint; `HARNESS_IMAGE_MODEL` defaults to `openai/gpt-5-image`. This is an additional paid call. Image tool failures are exposed to the model and trace. Both paths accept only PNG/JPEG/WebP signatures, max 10 MiB per image. This signature check is not a full image decoder or a guarantee against malformed raster files.
 
 Public fetches reject credentials, nonstandard ports, private/loopback/special IPs, and validate and pin DNS results at every redirect. No general browsing, shell, filesystem, code execution, or arbitrary-network tool is given to the model.
@@ -146,4 +160,37 @@ npm run smoke:models -- --confirm-paid --model 3
 This can make up to 8 model requests per run, two runs per model, with no token/cost cap. It saves actual status/usage and immutable artifacts. It has **not** been run automatically. No claim is made yet about comparative model quality or one-shot success rates.
 
 See [schema research](docs/schema-research.md) for alternative output formats and the rationale for this first experiment.
-# website-agent-harness
+
+## Reusable styles, context preparation, and archives
+
+### Optional description population
+
+Enable **description population** on a new task, choose its separate model/reasoning settings, and click **Populate**. This is an explicitly paid model stage with optional web search. Review/edit its proposed brief, accept individual external-reference suggestions, then use **Prepare / compare context** and **Generate**. Nothing generates automatically. Manual Description remains separate and overrides inferred guidance when explicitly requested, by prompt instruction only; validation and network controls are unchanged.
+
+The population agent receives only the destination path, manual instructions, referring URL, neighboring page descriptions, and `world-knowledge.json` (an editable array of strings, initially empty), plus optional search results. Neighbors are active pages under the same first path segment and the exact selected reference even if archived. It never receives internal HTML/CSS or chat histories. **Allow internal-reference change suggestions** defaults off; accepting a suggestion changes only the generation reference, not the recorded referring page. New still uses the existing ancestor default until actual click-through generation is implemented.
+
+New-session submissions include a description of the actual generated page in the same model call, saved per version. Existing versions get blank metadata sidecars under `data/descriptions/` when the harness enumerates descriptions, without rewriting artifacts or making summary calls. Legacy sessions retain their old submission contract. Hover over internal-reference options for descriptions; the selected published version shows its description directly.
+
+Population attempts and downloadable request/response/search traces live under `data/populations/`, including failed and cancelled attempts. Generation records link back to the attempt and its accepted brief/references. Search uses OpenRouter's Exa server tool, limited by `HARNESS_POPULATION_SEARCHES` (default 2) and `HARNESS_POPULATION_SEARCH_RESULTS` (default 5, maximum 25). Search is offered on the initial request only; repairs cannot start fresh searches. Proposed URLs must appear in provider-reported successful search sources. If source URLs are not exposed, the agent must omit references and report that limitation. The installed SDK requires transport-level insertion of the documented `max_uses` field; this is included in captured outgoing requests.
+
+API: `POST /api/populations` takes `path`, optional `description`, nullable `internalReference`, `allowReferenceSuggestions`, `model`, and `effort`; it returns an attempt `id`. `GET /api/populations/:id` returns status/result; `/events` streams events, `/trace` downloads the record and events, and `POST .../cancel` cancels it. Session creation accepts optional `populationId` and `populatedBrief`. A changed destination or manual instruction invalidates association with the old attempt. No new CLI population command or automatic click-through generation is included.
+
+Population/search usage is separate from website usage. Missing provider metrics remain unknown. Offline tests do not establish live quality, latency, pricing, search-source coverage, or provider search-limit enforcement.
+
+New tasks use an optional **Internal reference** (an exact stored session/version) and an ordered list of **External references**. Each has an independent Clean, Structure-preserving, Relevant subset, or Design/content brief selector; Clean is the default. New from a displayed version selects its oldest resolvable generation ancestor. Missing records and cycles produce warnings, never a URL-based replacement.
+
+**Prepare / compare context** captures references and compares all four deterministic transformations without calling an LLM. Generation reuses that preparation; **Refresh references** explicitly recaptures it. Changing a source invalidates preparation. Originals, variants, omission reports, and warnings live under `data/preparations/`. Estimates use pinned `js-tiktoken@1.0.21` with `o200k_base`, not model-specific billing counts; provider input/cache usage is displayed separately and missing metrics remain “not reported.” Relevant CSS filtering is conservative, not exact unused-CSS detection. Brief mode is inspiration, not reproducible CSS. Failed extraction falls back with a warning.
+
+Only the selected internal reference can supply inherited CSS, and only when its original path shares the target's first segment. Its complete resolved CSS is protected from compression and counted once. In the ordinary website submission, the model chooses `reuse`, `extend`, or `new`, with a short rationale. Extensions follow the pinned base without cascade-layer wrapping. Edits replace the whole page-specific extension; they do not repeatedly append patches. The **CSS decision** summary shows the accepted choice, rationale, base version, and authored/resolved sizes. Downloadable traces contain `style.decision` for every attempted submission, including validation failures. These are explicit explanations, not hidden reasoning. Rules remain editable in `prompts/style-decision.md`.
+
+Use **Archive selected version & release URL** beside version controls to archive exactly the selected version. The entire session becomes read-only and retains all history/assets. Its served URL is `/_archive/<sessionId>/<versionId><originalPath>`; the original path becomes available to a new session. Navigation still targets the original site's locations, not frozen archive copies. Archived sessions remain inspectable and selectable as references through the Archived/All filters. Active runs cannot be archived. No existing data is migrated or deleted.
+
+```sh
+npm run harness -- prepare --path /tomorrow/astro --model 1 --internal SESSION_ID/VERSION_ID --internal-level relevant --external https://example.org --external-level brief
+npm run harness -- create --path /tomorrow/astro --model 1 --internal SESSION_ID/VERSION_ID --internal-level relevant --external https://example.org --external-level brief --preparation PREPARATION_ID
+npm run harness -- archive SESSION_ID --version VERSION_ID
+```
+
+API: `POST /api/prepare` accepts the creation fields and returns `preparationId` plus comparisons. Creation accepts `internalReference: {sessionId, versionId}`, `internalCompression`, ordered `externalReferences: [{url, compression}]`, and optional `preparationId`. Level values are `clean`, `structure`, `relevant`, `brief`. Do not mix these with legacy parent fields. `POST /api/sessions/:id/archive` takes `{versionId}`. `GET /api/bootstrap?filter=active|archived|all` filters sessions (default all for compatibility).
+
+Interactive generated widgets, search behavior, and language switching are not implemented. No paid generation or live cache/quality experiment is part of these changes.

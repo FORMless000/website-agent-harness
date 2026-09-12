@@ -11,12 +11,15 @@ import type { Run, RunEvent, Session } from "./contracts.js";
 const help = `Website Agent Harness
 
   npm start -- [--assets none|openverse|generated|both] [--port 8787]
-  npm run harness -- create --path /anything --model 1 [--description "..."] [--parent URL] [--effort high]
+  npm run harness -- create --path /anything --model 1 [--description "..."] [--parent URL] [--parent-context full|compact] [--effort high]
   npm run harness -- chat SESSION_ID
   npm run harness -- edit SESSION_ID --message "..."
   npm run harness -- sessions
   npm run harness -- trace RUN_ID [--json]
   npm run harness -- models
+  npm run harness -- prepare --path /root/page --model 1 [--internal SESSION/VERSION] [--external URL --external-level clean|structure|relevant|brief]
+  npm run harness -- archive SESSION_ID --version VERSION_ID
+  create also accepts --internal-level LEVEL, repeated --external/--external-level, and --preparation ID.
 
 The server must be running for client commands. Model selection is required.
 --json prints complete JSONL events (including provider-visible reasoning).
@@ -34,6 +37,13 @@ async function main() {
       model: { type: "string" },
       description: { type: "string" },
       parent: { type: "string" },
+      "parent-context": { type: "string" },
+      internal: { type: "string" },
+      "internal-level": { type: "string" },
+      external: { type: "string", multiple: true },
+      "external-level": { type: "string", multiple: true },
+      preparation: { type: "string" },
+      version: { type: "string" },
       effort: { type: "string" },
       message: { type: "string" },
       json: { type: "boolean" },
@@ -162,7 +172,21 @@ async function main() {
     await follow(positionals[1]);
     return;
   }
-  if (command === "create") {
+  if (command === "archive") {
+    if (!positionals[1] || !values.version)
+      throw new Error("Supply session ID and --version.");
+    stdout.write(
+      JSON.stringify(
+        await api(`/sessions/${positionals[1]}/archive`, "POST", {
+          versionId: values.version,
+        }),
+        null,
+        2,
+      ) + "\n",
+    );
+    return;
+  }
+  if (command === "create" || command === "prepare") {
     let pagePath = values.path;
     let model = values.model;
     if ((!pagePath || !model) && stdin.isTTY) {
@@ -180,16 +204,46 @@ async function main() {
     }
     if (!pagePath || !model)
       throw new Error("Supply --path and --model (1–5).");
+    const ref = values.internal?.split("/");
+    if (ref && ref.length !== 2)
+      throw new Error("--internal must be SESSION_ID/VERSION_ID");
+    const payload = {
+      path: pagePath,
+      model,
+      description: values.description ?? "",
+      effort: values.effort ?? "high",
+      ...(values.parent || values["parent-context"]
+        ? {
+            parentUrl: values.parent ?? "",
+            parentContextMode: values["parent-context"] ?? "full",
+          }
+        : {}),
+      ...(ref
+        ? { internalReference: { sessionId: ref[0], versionId: ref[1] } }
+        : {}),
+      ...(values["internal-level"]
+        ? { internalCompression: values["internal-level"] }
+        : {}),
+      ...(values.external
+        ? {
+            externalReferences: values.external.map((url, i) => ({
+              url,
+              compression: values["external-level"]?.[i] ?? "clean",
+            })),
+          }
+        : {}),
+      ...(values.preparation ? { preparationId: values.preparation } : {}),
+    };
+    if (command === "prepare") {
+      stdout.write(
+        JSON.stringify(await api("/prepare", "POST", payload), null, 2) + "\n",
+      );
+      return;
+    }
     const result = await api<{ session: Session; run: Run }>(
       "/sessions",
       "POST",
-      {
-        path: pagePath,
-        model,
-        description: values.description ?? "",
-        parentUrl: values.parent ?? "",
-        effort: values.effort ?? "high",
-      },
+      payload,
     );
     stdout.write(
       `Session: ${result.session.id}\nRun: ${result.run.id}\nPage: ${origin}${result.session.path}\n`,

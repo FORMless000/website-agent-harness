@@ -88,10 +88,49 @@ export function mockTransport(
   let count = 0;
   return async (input, init) => {
     const request = new Request(input, init);
-    requests.push(JSON.parse(await request.text()));
+    const payload = JSON.parse(await request.text());
+    requests.push(payload);
     if (count >= outputs.length)
       throw new Error("Unexpected extra model request.");
-    const output = outputs[count]!;
+    const output = outputs[count]!.map((item: any) => {
+      if (
+        item.type !== "function_call" ||
+        item.name !== "submit_website" ||
+        !JSON.stringify(payload.tools).includes('"style"')
+      )
+        return item;
+      try {
+        const a = JSON.parse(item.arguments);
+        if (JSON.stringify(payload.tools).includes('"pageDescription"'))
+          return {
+            ...item,
+            arguments: JSON.stringify({
+              ...a,
+              schemaVersion: 3,
+              style: a.style ?? {
+                mode: "new",
+                rationale: "Offline fixture standalone style",
+              },
+              pageDescription:
+                "A small museum of everyday objects with a responsive card layout and an about disclosure.",
+            }),
+          };
+        if (a.schemaVersion !== 1) return item;
+        return {
+          ...item,
+          arguments: JSON.stringify({
+            ...a,
+            schemaVersion: 2,
+            style: {
+              mode: "new",
+              rationale: "Offline fixture standalone style",
+            },
+          }),
+        };
+      } catch {
+        return item;
+      }
+    });
     const response = mockResponse(output, `response-${++count}`);
     const events = [
       ...output.map((item, index) => ({

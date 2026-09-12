@@ -25,6 +25,7 @@ test("HTTP publishing, version preview, security, SSE replay and CLI clients", a
       mockTransport([
         [submission(artifact())],
         [submission(artifact("Edited museum"), "edit")],
+        [submission(artifact("CLI child"), "cli-child")],
       ]),
     ),
     async () => catalog,
@@ -148,6 +149,31 @@ test("HTTP publishing, version preview, security, SSE replay and CLI clients", a
     );
     const boot = await (await fetch(origin + "/api/bootstrap")).text();
     assert.doesNotMatch(boot, /offline-test-key/);
+    const child = await exec(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        path.join(ROOT, "src/cli.ts"),
+        "create",
+        "--path",
+        "/cli-child",
+        "--model",
+        "1",
+        "--parent",
+        origin + "/deep/arbitrary/path",
+        "--parent-context",
+        "compact",
+        "--port",
+        String(config.port),
+      ],
+      { cwd: ROOT },
+    );
+    assert.match(child.stdout, /success/);
+    assert.equal(
+      (await harness.store.byPath("/cli-child"))?.parentContextMode,
+      "compact",
+    );
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
