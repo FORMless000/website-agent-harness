@@ -203,7 +203,7 @@ async function main() {
       }
     }
     if (!pagePath || !model)
-      throw new Error("Supply --path and --model (1–6).");
+      throw new Error("Supply --path and --model (1–9).");
     const ref = values.internal?.split("/");
     if (ref && ref.length !== 2)
       throw new Error("--internal must be SESSION_ID/VERSION_ID");

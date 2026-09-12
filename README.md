@@ -66,6 +66,17 @@ Manual harness/CLI creation requires an explicit model. Automatic visits default
 | 4      | GLM 5.3              | `z-ai/glm-5.3`                  |
 | 5      | DeepSeek V4 Pro 0813 | `deepseek/deepseek-v4-pro-0813` |
 | 6      | DeepSeek V4.1 Flash  | `deepseek/deepseek-v4.1-flash`  |
+| 7      | Gemini 3.8 Flash     | `google/gemini-3.8-flash`       |
+| 8      | Claude Sonnet 5      | `anthropic/claude-sonnet-5`     |
+| 9      | Kimi K3              | `moonshotai/kimi-k3`            |
+
+Additional comparison candidates, selected from the live OpenRouter catalog on 2026-09-12:
+
+- [Gemini 3.8 Flash](https://openrouter.ai/google/gemini-3.8-flash): a responsive coding/agentic alternative from Google; advertised efforts are low, medium, and high.
+- [Claude Sonnet 5](https://openrouter.ai/anthropic/claude-sonnet-5): another Anthropic coding option; advertised efforts are low, medium, high, xhigh, and max.
+- [Kimi K3](https://openrouter.ai/moonshotai/kimi-k3): a candidate for complex coding and long-context agentic work; advertised efforts are low, high, and max.
+
+These are research candidates, not locally established quality rankings. All three advertise the harness's required tool calling, tool choice, reasoning, and structured outputs. Their registry entries use the existing generation and population paths. Offline compatibility checks do not establish live provider success or website quality. DeepSeek V4.1 Flash/low remains the automatic default.
 
 Every run checks the live OpenRouter catalog for the exact slug, reasoning, tools, tool choice, and structured-output support. Unknown or unavailable capabilities fail explicitly; there is no silent model substitution. Manual creation defaults to high reasoning effort; automatic visits use low, the lowest advertised effort for DeepSeek V4.1 Flash in the [OpenRouter catalog](https://openrouter.ai/api/v1/models) verified on 2026-09-12; available choices come from catalog metadata when provided. An advertised capability is **not** an empirical reliability score or a guarantee that a provider route currently works.
 

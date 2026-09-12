@@ -436,3 +436,37 @@ test("empty provider responses with a deliberately slow trace sink are handled w
     );
   }
 });
+
+test("additional model IDs preserve numbering and enforce advertised reasoning efforts", () => {
+  const additions = [
+    [7, "google/gemini-3.8-flash", ["low", "medium", "high"]],
+    [8, "anthropic/claude-sonnet-5", ["low", "medium", "high", "xhigh", "max"]],
+    [9, "moonshotai/kimi-k3", ["low", "high", "max"]],
+  ] as const;
+  for (const [number, id, efforts] of additions) {
+    assert.equal(resolveModel(number).id, id);
+    assert.equal(resolveModel(id).number, number);
+    const metadata = {
+      ...catalog[0],
+      id,
+      reasoning: { supported_efforts: [...efforts] },
+    };
+    assert.equal(requireCapability([metadata], id, "low").id, id);
+    assert.equal(requireCapability([metadata], id, "high").id, id);
+  }
+  assert.throws(
+    () =>
+      requireCapability(
+        [
+          {
+            ...catalog[0],
+            id: additions[0][1],
+            reasoning: { supported_efforts: [...additions[0][2]] },
+          },
+        ],
+        additions[0][1],
+        "max",
+      ),
+    /supports reasoning efforts/,
+  );
+});

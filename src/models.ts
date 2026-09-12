@@ -15,6 +15,9 @@ export const MODEL_REGISTRY = [
     label: "DeepSeek V4.1 Flash",
     id: "deepseek/deepseek-v4.1-flash",
   },
+  { number: 7, label: "Gemini 3.8 Flash", id: "google/gemini-3.8-flash" },
+  { number: 8, label: "Claude Sonnet 5", id: "anthropic/claude-sonnet-5" },
+  { number: 9, label: "Kimi K3", id: "moonshotai/kimi-k3" },
 ] as const;
 export const effortSchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
 export type Effort = z.infer<typeof effortSchema>;
@@ -41,7 +44,7 @@ export function resolveModel(input: string | number) {
   );
   if (!model)
     throw new Error(
-      "Select a registered model number (1–6) or its exact slug.",
+      "Select a registered model number (1–9) or its exact slug.",
     );
   return model;
 }
