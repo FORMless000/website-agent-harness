@@ -4,7 +4,7 @@ This file is updated after local checks. Offline fixtures are explicitly synthet
 
 ## Observed local results
 
-Latest test/build verification: 2026-09-06. Catalog and vulnerability checks below were performed on 2026-09-05.
+Earlier baseline test/build verification: 2026-09-06. The automatic-generation checks below are newer. Catalog and vulnerability checks below were performed on 2026-09-05.
 
 - Node 20.20.1; pinned dependency lockfile.
 - `npm run typecheck`: passed.
@@ -40,3 +40,13 @@ Issues found and fixed during testing: SDK automatic-loop follow-up spend after 
 - Bit-for-bit reproducibility of LLM output; the harness preserves evidence, not provider determinism.
 
 The opt-in `smoke:models` command performs live create/edit checks and records actual results. It is not part of the default test suite and requires explicit paid-call confirmation.
+
+## Automatic URL generation — 2026-09-12
+
+- `npm run typecheck` and `npm run build`: passed.
+- `npm test`: **40 passed**. New coverage includes automatic population/create order, shared concurrent visits, manual-create races, pinned references and neighbor fallback, settings snapshots/persistence/conflicts, search-tool omission, failure fallback, explicit retry, cancellation, shutdown, restart, and archive URL reuse.
+- `HARNESS_BROWSER_CHANNEL=chrome npm run test:browser`: **4 passed**. Covers the loading shell, real same-origin click referrers, exact preview/archive origins, script-disabled preview continuation, visitor retry, settings saves, inspector links, and the existing manual workflows.
+- Desktop and mobile settings screenshots and the loading screenshot were visually inspected. Mobile settings fit a 390-pixel viewport.
+- The bundled Playwright Chromium was unavailable; installed Chrome was used without downloading a browser.
+- Changed files pass Prettier. The full `npm run lint` check reports existing formatting in unchanged `LICENSE.md`; the license was not edited.
+- No live model-quality or paid generation check was performed. Fixtures use synthetic outputs and mocked model transport; no deployment or dependency installation was required.

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Loading</title>
+    <link rel="stylesheet" href="/_settings/settings.css" />
+    <script type="module" src="/_settings/loading.js"></script>
+  </head>
+  <body
+    class="loading"
+    data-attempt="__ATTEMPT__"
+    data-status="__STATUS__"
+    data-started-at="__STARTED__"
+    data-finished-at="__FINISHED__"
+  >
+    <main>
+      <p role="status" id="message">__MESSAGE__</p>
+      <div id="progress" __PROGRESS__>
+        <p id="phase" aria-live="polite">Preparing page…</p>
+        <p id="elapsed" aria-label="Elapsed generation time">Elapsed: 0s</p>
+      </div>
+      <button id="retry" __RETRY__>Retry</button>
+      __FALLBACK__
+    </main>
+  </body>
+</html>

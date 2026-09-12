@@ -28,7 +28,7 @@ export function normalizePath(value: string): string {
   if (
     !result ||
     result.includes("//") ||
-    /^\/(?:_harness|_assets|_archive|api)(?:\/|$)/.test(result)
+    /^\/(?:_harness|_settings|_assets|_archive|api)(?:\/|$)/.test(result)
   )
     throw new Error("This path is reserved; choose a non-root page path.");
   return result;

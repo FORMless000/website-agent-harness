@@ -39,6 +39,7 @@ const context: PopulationContext = {
   query: { path: "/museum/guide", manualInstructions: "Use purple." },
   referringUrl: null,
   allowReferenceSuggestions: false,
+  searchEnabled: true,
   neighbors: [],
   worldKnowledge: [],
 };
@@ -59,6 +60,7 @@ const record = (): PopulationRecord => ({
     description: context.query.manualInstructions,
     internalReference: null,
     allowReferenceSuggestions: false,
+    searchEnabled: true,
     model: 1,
     effort: "high",
   },
@@ -325,4 +327,21 @@ test("cancellation, failure, and restart keep standalone population traces", asy
   while (failed.active.has(attempt.id))
     await new Promise((r) => setTimeout(r, 5));
   assert.equal((await failed.get(attempt.id)).status, "failed");
+});
+
+test("search disabled omits the server tool on the actual SDK request", async () => {
+  const requests: Record<string, any>[] = [];
+  const input = record();
+  input.input.searchEnabled = false;
+  await createPopulationDriver(mockTransport([[submit(result)]], requests))(
+    await testConfig(),
+    input,
+    new AbortController().signal,
+    async () => {},
+  );
+  assert.ok(
+    !requests[0].tools.some(
+      (tool: any) => tool.type === "openrouter:web_search",
+    ),
+  );
 });

@@ -21,7 +21,7 @@ npm start -- --assets none
 
 Open [the workspace](http://127.0.0.1:8787/_harness/). The server deliberately binds only to `127.0.0.1`, not the LAN or the public internet. An API key is not needed to open the interface or inspect saved experiments; generation requires one.
 
-Asset mode is fixed when starting the server:
+Manual harness/CLI asset mode is selected when starting the server. Automatic visits initially inherit it and can override it in `/_settings`:
 
 ```sh
 npm start -- --assets openverse
@@ -29,7 +29,7 @@ npm start -- --assets generated
 npm start -- --assets both
 ```
 
-Only run one server for a data directory. `--port 8788` changes its port. The service owns no external deployment and makes no API calls merely to serve a generated URL. Visiting an unknown URL returns 404.
+Only run one server for a data directory. `--port 8788` changes its port. The service owns no external deployment. Published URLs serve without model calls. Visiting an unexplored page URL starts automatic generation and shows a minimal loading page; configure this behavior at [Automatic settings](http://127.0.0.1:8787/_settings).
 
 ## CLI
 
@@ -56,7 +56,7 @@ npm run harness -- models
 
 ### Explicit model choice
 
-There is **no default model**. Choose one before creating each session; the choice is fixed for that session.
+Manual harness/CLI creation requires an explicit model. Automatic visits default to DeepSeek V4.1 Flash with low effort for both description and website generation; change these separately in `/_settings`. The website model is fixed for each created session, including retries.
 
 | Number | Model                | OpenRouter ID                   |
 | ------ | -------------------- | ------------------------------- |
@@ -65,8 +65,9 @@ There is **no default model**. Choose one before creating each session; the choi
 | 3      | GPT-5.6 Luna         | `openai/gpt-5.6-luna`           |
 | 4      | GLM 5.3              | `z-ai/glm-5.3`                  |
 | 5      | DeepSeek V4 Pro 0813 | `deepseek/deepseek-v4-pro-0813` |
+| 6      | DeepSeek V4.1 Flash  | `deepseek/deepseek-v4.1-flash`  |
 
-Every run checks the live OpenRouter catalog for the exact slug, reasoning, tools, tool choice, and structured-output support. Unknown or unavailable capabilities fail explicitly; there is no silent model substitution. High reasoning effort is the default; available choices come from catalog metadata when provided. An advertised capability is **not** an empirical reliability score or a guarantee that a provider route currently works.
+Every run checks the live OpenRouter catalog for the exact slug, reasoning, tools, tool choice, and structured-output support. Unknown or unavailable capabilities fail explicitly; there is no silent model substitution. Manual creation defaults to high reasoning effort; automatic visits use low, the lowest advertised effort for DeepSeek V4.1 Flash in the [OpenRouter catalog](https://openrouter.ai/api/v1/models) verified on 2026-09-12; available choices come from catalog metadata when provided. An advertised capability is **not** an empirical reliability score or a guarantee that a provider route currently works.
 
 ## Generation and editing
 
@@ -149,7 +150,7 @@ Browser tests require Playwright's matching Chromium (`npx playwright install ch
 
 To use an already-installed Chrome instead of downloading Chromium: `HARNESS_BROWSER_CHANNEL=chrome npm run test:browser`.
 
-To explicitly spend credits on create+edit checks for all five models, with the real server running:
+To explicitly spend credits on create+edit checks for all registered models, with the real server running:
 
 ```sh
 npm run smoke:models -- --confirm-paid
@@ -167,13 +168,13 @@ See [schema research](docs/schema-research.md) for alternative output formats an
 
 Enable **description population** on a new task, choose its separate model/reasoning settings, and click **Populate**. This is an explicitly paid model stage with optional web search. Review/edit its proposed brief, accept individual external-reference suggestions, then use **Prepare / compare context** and **Generate**. Nothing generates automatically. Manual Description remains separate and overrides inferred guidance when explicitly requested, by prompt instruction only; validation and network controls are unchanged.
 
-The population agent receives only the destination path, manual instructions, referring URL, neighboring page descriptions, and `world-knowledge.json` (an editable array of strings, initially empty), plus optional search results. Neighbors are active pages under the same first path segment and the exact selected reference even if archived. It never receives internal HTML/CSS or chat histories. **Allow internal-reference change suggestions** defaults off; accepting a suggestion changes only the generation reference, not the recorded referring page. New still uses the existing ancestor default until actual click-through generation is implemented.
+The population agent receives only the destination path, manual instructions, referring URL, neighboring page descriptions, and `world-knowledge.json` (an editable array of strings, initially empty), plus optional search results. Neighbors are active pages under the same first path segment and the exact selected reference even if archived. It never receives internal HTML/CSS or chat histories. **Allow internal-reference change suggestions** defaults off; accepting a suggestion changes only the generation reference, not the recorded referring page. Manual New still uses the existing ancestor default. Automatic click-through generation pins the referring page/version instead.
 
 New-session submissions include a description of the actual generated page in the same model call, saved per version. Existing versions get blank metadata sidecars under `data/descriptions/` when the harness enumerates descriptions, without rewriting artifacts or making summary calls. Legacy sessions retain their old submission contract. Hover over internal-reference options for descriptions; the selected published version shows its description directly.
 
 Population attempts and downloadable request/response/search traces live under `data/populations/`, including failed and cancelled attempts. Generation records link back to the attempt and its accepted brief/references. Search uses OpenRouter's Exa server tool, limited by `HARNESS_POPULATION_SEARCHES` (default 2) and `HARNESS_POPULATION_SEARCH_RESULTS` (default 5, maximum 25). Search is offered on the initial request only; repairs cannot start fresh searches. Proposed URLs must appear in provider-reported successful search sources. If source URLs are not exposed, the agent must omit references and report that limitation. The installed SDK requires transport-level insertion of the documented `max_uses` field; this is included in captured outgoing requests.
 
-API: `POST /api/populations` takes `path`, optional `description`, nullable `internalReference`, `allowReferenceSuggestions`, `model`, and `effort`; it returns an attempt `id`. `GET /api/populations/:id` returns status/result; `/events` streams events, `/trace` downloads the record and events, and `POST .../cancel` cancels it. Session creation accepts optional `populationId` and `populatedBrief`. A changed destination or manual instruction invalidates association with the old attempt. No new CLI population command or automatic click-through generation is included.
+API: `POST /api/populations` takes `path`, optional `description`, nullable `internalReference`, `allowReferenceSuggestions`, `model`, and `effort`; it returns an attempt `id`. `GET /api/populations/:id` returns status/result; `/events` streams events, `/trace` downloads the record and events, and `POST .../cancel` cancels it. Session creation accepts optional `populationId` and `populatedBrief`. A changed destination or manual instruction invalidates association with the old attempt. No CLI population command is included; automatic click-through visits call the same population and generation methods on the server.
 
 Population/search usage is separate from website usage. Missing provider metrics remain unknown. Offline tests do not establish live quality, latency, pricing, search-source coverage, or provider search-limit enforcement.
 
@@ -194,3 +195,19 @@ npm run harness -- archive SESSION_ID --version VERSION_ID
 API: `POST /api/prepare` accepts the creation fields and returns `preparationId` plus comparisons. Creation accepts `internalReference: {sessionId, versionId}`, `internalCompression`, ordered `externalReferences: [{url, compression}]`, and optional `preparationId`. Level values are `clean`, `structure`, `relevant`, `brief`. Do not mix these with legacy parent fields. `POST /api/sessions/:id/archive` takes `{versionId}`. `GET /api/bootstrap?filter=active|archived|all` filters sessions (default all for compatibility).
 
 Interactive generated widgets, search behavior, and language switching are not implemented. No paid generation or live cache/quality experiment is part of these changes.
+
+## Automatic visits and live settings
+
+An unexplored page GET starts one shared attempt per normalized path: resolve an internal reference, optionally populate a brief/search for references, then call the existing `Harness.create` flow. Visitors see “Loading…”, the current stage (description, reasoning, or final response), and an elapsed timer before the published HTML. Stages follow provider events; waiting/preparation shows “Preparing page…”. Raw reasoning and response text stay in backend traces. Failed website generation shows “Unable to load this page” and an explicit Retry button. Reloading a failure does not spend more credits. Retries preserve failed traces and reuse any existing unpublished session and its original model/conversation. Description-stage failures continue with a blank brief; rejected external captures are omitted with recorded warnings.
+
+A local referring URL selects its published version; archive and preview URLs select their exact version. Otherwise, choose the nearest active published page by path-tree distance, preferring the same first segment, then falling back across the project. Lexical path breaks ties. Empty projects use no reference. Generated and preview responses send same-origin referrers, never external ones. Missing/hidden referrers use the neighbor fallback. The reference is pinned for the attempt, and population cannot replace it.
+
+Root still opens the laboratory. API, harness, settings, asset, and archive namespaces are reserved. HEAD, non-GET, prefetch, non-document resource requests, and common resource-file URLs never generate pages. Query strings share the pathname's page; fragments remain browser state. Sandboxed preview loading uses a script-free fallback; open the page directly for visitor Retry controls. Generated HTML remains script-free with the same CSP.
+
+`/_settings` applies only to automatic visits. Main controls select generation/description/search switches and independent website/description models and efforts. Expand references, images, and advanced execution to set compression, search limits, existing image modes/model/attempt limits, model steps, and stage timeout in milliseconds. Prompts link to the existing editor; world knowledge and startup configuration are shown read-only. The initial models are DeepSeek V4.1 Flash/low, population/search are on, compression is Clean, and other execution settings inherit startup values. Disabling generation stops new attempts, not active ones or published pages.
+
+Settings are saved atomically in `data/automatic-settings.json` with revision conflict checks. Every attempt snapshots effective settings; saving does not change active work or manual configuration. Invalid settings are rejected. Interrupted attempts are failed on restart and wait for explicit retry. Run only one server per data directory, as before.
+
+`data/automatic/<id>/record.json` links path, selected reference/reason, settings, warnings, population ID, session ID and run ID. The settings page lists attempts and links existing session/trace inspectors. Population events and ordinary generation events/input snapshots remain in their existing locations. Output page descriptions are still recorded even when the input description stage is disabled.
+
+API additions: `GET /api/settings` returns settings, revision, models, and read-only resources. `PUT /api/settings` takes `{settings, revision}` using the existing JSON/custom-header write protection. `GET /api/automatic` lists backend records; `GET /api/automatic/:id` reads one. The loading shell polls `GET /api/automatic/:id/status` (ID, status, stage and attempt timestamps only); `POST /api/automatic/:id/retry` explicitly retries a failed attempt. No new generation service, queue, deployment, or CLI workflow is introduced.

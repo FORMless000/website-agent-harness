@@ -156,6 +156,12 @@ test("asset tools follow startup switches; keys are redacted, raster signatures 
 test("no default model and explicit capability errors", () => {
   assert.throws(() => resolveModel(""));
   assert.equal(resolveModel(5).id, catalog[4]!.id);
+  assert.equal(resolveModel(6).id, "deepseek/deepseek-v4.1-flash");
+  assert.equal(resolveModel("deepseek/deepseek-v4.1-flash").number, 6);
+  assert.equal(
+    requireCapability(catalog, resolveModel(6).id, "low").id,
+    resolveModel(6).id,
+  );
   assert.throws(() => requireCapability([], catalog[0]!.id, "high"));
   assert.throws(() => requireCapability(catalog, catalog[0]!.id, "medium"));
 });

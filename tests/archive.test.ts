@@ -48,7 +48,10 @@ test("archive route serves selected version, rebases links, survives restart, an
     assert.match(html, /Version 1/);
     assert.doesNotMatch(html, /Version 2/);
     assert.match(html, /href="\/root\/next"/);
-    assert.equal((await fetch(origin + "/root/page")).status, 404);
+    assert.equal(
+      (await fetch(origin + "/root/page", { method: "HEAD" })).status,
+      404,
+    );
     const replacement = await harness.create({ path: "/root/page", model: 1 });
     const vr = (await harness.wait(replacement.run.id)).versionId!;
     const second = await harness.archive(replacement.session.id, vr);

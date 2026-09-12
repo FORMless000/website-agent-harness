@@ -1,0 +1,170 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  color: #292722;
+  background: #faf9f6;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header,
+main {
+  max-width: 960px;
+  margin: auto;
+  padding: 24px;
+}
+header {
+  padding-bottom: 0;
+}
+h1 {
+  font-size: 2rem;
+  margin-bottom: 10px;
+}
+h2 {
+  font-size: 1.2rem;
+}
+p {
+  line-height: 1.55;
+}
+a {
+  color: #365c53;
+}
+fieldset {
+  border: 1px solid #d7d5ce;
+  border-radius: 6px;
+  margin: 0 0 20px;
+  padding: 18px;
+  min-width: 0;
+}
+legend,
+summary {
+  font-weight: 600;
+}
+label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+input,
+select,
+button {
+  font: inherit;
+  padding: 10px;
+  border: 1px solid #aaa99f;
+  border-radius: 4px;
+  background: white;
+  color: inherit;
+  max-width: 100%;
+}
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+input:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #689e8b;
+  outline-offset: 3px;
+}
+button,
+summary {
+  cursor: pointer;
+}
+button:disabled,
+fieldset:disabled {
+  opacity: 0.6;
+}
+button[type="submit"] {
+  color: white;
+  background: #365c53;
+}
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+details {
+  border-top: 1px solid #d7d5ce;
+  padding: 18px 0;
+}
+summary {
+  margin-bottom: 18px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+  padding: 14px;
+  background: #efeee8;
+}
+code {
+  overflow-wrap: anywhere;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin: 18px 0;
+}
+th,
+td {
+  text-align: left;
+  padding: 12px 10px;
+  border-bottom: 1px solid #d7d5ce;
+}
+td a {
+  margin-right: 10px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+.loading main {
+  padding: 32px;
+}
+.loading #message {
+  color: #6b6962;
+  font-size: 1rem;
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 620px) {
+  .columns {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  header,
+  main {
+    padding: 20px;
+  }
+}
+.loading #phase {
+  font-size: 0.9rem;
+}
+.loading #elapsed {
+  color: #6b6962;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}

@@ -21,6 +21,7 @@ import { initialContext, type ContextMessage } from "./context.js";
 
 export type CreateRequest = z.infer<typeof createSchema>;
 export interface PreparedReference {
+  requestIndex?: number;
   source: ParentSnapshot;
   original: string;
   variants: Record<Compression, Variant>;
@@ -95,6 +96,7 @@ export async function prepare(
   store: Store,
   config: Config,
   request: CreateRequest,
+  onReferenceWarning?: (warning: string) => void,
 ): Promise<Preparation> {
   if (request.preparationId) {
     const saved = await store.json<Preparation>(
@@ -131,13 +133,21 @@ export async function prepare(
       result.base?.css,
     );
   }
-  for (const ref of request.externalReferences ?? []) {
-    const url = new URL(ref.url);
-    if (["localhost", "127.0.0.1"].includes(url.hostname))
-      throw new Error("Use the internal reference picker for harness pages.");
-    result.external.push(
-      prepareReference(await captureParent(ref.url, store, config.port)),
-    );
+  for (const [index, ref] of (request.externalReferences ?? []).entries()) {
+    try {
+      const url = new URL(ref.url);
+      if (["localhost", "127.0.0.1"].includes(url.hostname))
+        throw new Error("Use the internal reference picker for harness pages.");
+      result.external.push({
+        ...prepareReference(await captureParent(ref.url, store, config.port)),
+        ...(onReferenceWarning ? { requestIndex: index } : {}),
+      });
+    } catch (error) {
+      if (!onReferenceWarning) throw error;
+      onReferenceWarning(
+        `External reference omitted (${ref.url}): ${String(error)}`,
+      );
+    }
   }
   await atomicWrite(
     store.file("preparations", result.id),
@@ -169,7 +179,8 @@ export function preparationInput(
   p.external.forEach((ref, i) =>
     add(
       ref,
-      request.externalReferences?.[i]?.compression ?? "clean",
+      request.externalReferences?.[ref.requestIndex ?? i]?.compression ??
+        "clean",
       i === p.external.length - 1,
     ),
   );
@@ -258,7 +269,11 @@ export function comparisons(
   );
   const refs = [
     ...(p.internal ? [{ kind: "internal", ref: p.internal, index: 0 }] : []),
-    ...p.external.map((ref, index) => ({ kind: "external", ref, index })),
+    ...p.external.map((ref, index) => ({
+      kind: "external",
+      ref,
+      index: ref.requestIndex ?? index,
+    })),
   ];
   return {
     estimator: ESTIMATOR,

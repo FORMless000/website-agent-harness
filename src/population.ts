@@ -18,7 +18,7 @@ import {
   type RunEvent,
 } from "./contracts.js";
 import { effortSchema, resolveModel } from "./models.js";
-import type { Config } from "./config.js";
+import { publicConfig, type Config } from "./config.js";
 import { Store, atomicWrite, now } from "./store.js";
 import { Prompts } from "./prompts.js";
 import { sameRoot } from "./preparation.js";
@@ -33,6 +33,7 @@ export const populationRequestSchema = z
     description: z.string().default(""),
     internalReference: referenceIdSchema.nullable().default(null),
     allowReferenceSuggestions: z.boolean().default(false),
+    searchEnabled: z.boolean().default(true),
     model: z.union([z.string(), z.number()]),
     effort: effortSchema.default("high"),
   })
@@ -85,6 +86,7 @@ export interface PopulationContext {
   query: { path: string; manualInstructions: string };
   referringUrl: string | null;
   allowReferenceSuggestions: boolean;
+  searchEnabled?: boolean;
   neighbors: {
     sessionId: string;
     versionId: string;
@@ -101,6 +103,7 @@ export interface PopulationRecord {
   input: PopulationInput;
   context: PopulationContext;
   instructions: string;
+  config?: ReturnType<typeof publicConfig>;
   result?: PopulationResult;
   error?: string;
 }
@@ -236,7 +239,10 @@ export function createPopulationDriver(fetcher?: Fetcher): PopulationDriver {
             reasoning: { effort: record.input.effort },
             instructions: record.instructions,
             input: step === 1 ? JSON.stringify(record.context) : [],
-            tools: step === 1 ? [submit, serverTool(search)] : [submit],
+            tools:
+              step === 1 && record.input.searchEnabled !== false
+                ? [submit, serverTool(search)]
+                : [submit],
             state,
             // Search is offered only on the first request, bounding total search uses across repairs.
             allowFinalResponse: false,
@@ -317,6 +323,11 @@ export function createPopulationDriver(fetcher?: Fetcher): PopulationDriver {
 }
 export class Populations {
   active = new Map<string, AbortController>();
+  private pending = new Map<string, Promise<void>>();
+  async wait(id: string) {
+    await this.pending.get(id);
+    return this.get(id);
+  }
   constructor(
     private config: Config,
     private store: Store,
@@ -355,7 +366,8 @@ export class Populations {
         }
       });
   }
-  async start(value: unknown) {
+  async start(value: unknown, override?: Config) {
+    const config = { ...(override ?? this.config) };
     const input = populationRequestSchema.parse(value);
     input.model = resolveModel(input.model).id;
     const descriptions = await indexDescriptions(this.store);
@@ -398,7 +410,7 @@ export class Populations {
         .parse(
           JSON.parse(
             await readFile(
-              path.join(this.config.root, "world-knowledge.json"),
+              path.join(config.root, "world-knowledge.json"),
               "utf8",
             ),
           ),
@@ -411,6 +423,7 @@ export class Populations {
       status: "running",
       startedAt: now(),
       input,
+      config: publicConfig(config),
       context: {
         query: { path: input.path, manualInstructions: input.description },
         referringUrl: input.internalReference
@@ -418,6 +431,7 @@ export class Populations {
               .path
           : null,
         allowReferenceSuggestions: input.allowReferenceSuggestions,
+        searchEnabled: input.searchEnabled,
         neighbors,
         worldKnowledge,
       },
@@ -442,7 +456,7 @@ export class Populations {
         seq: ++seq,
         at: now(),
         type,
-        data: redact(data, this.config.apiKey),
+        data: redact(data, config.apiKey),
       };
       pending = pending.then(async () => {
         const { appendFile } = await import("node:fs/promises");
@@ -453,12 +467,12 @@ export class Populations {
       });
       await pending;
     };
-    const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
-    void (async () => {
+    const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+    const done = (async () => {
       try {
         await emit("population.start", record);
         record.result = await this.driver(
-          this.config,
+          config,
           record,
           controller.signal,
           emit,
@@ -467,7 +481,7 @@ export class Populations {
         record.status = "success";
       } catch (error) {
         record.status = controller.signal.aborted ? "cancelled" : "failed";
-        record.error = String(redact(String(error), this.config.apiKey));
+        record.error = String(redact(String(error), config.apiKey));
       } finally {
         clearTimeout(timer);
         record.finishedAt = now();
@@ -481,9 +495,11 @@ export class Populations {
     })().catch((error) => {
       this.active.delete(record.id);
       process.stderr.write(
-        `Population persistence failure: ${String(redact(String(error), this.config.apiKey))}\n`,
+        `Population persistence failure: ${String(redact(String(error), config.apiKey))}\n`,
       );
     });
+    this.pending.set(record.id, done);
+    void done.finally(() => this.pending.delete(record.id));
     return { id: record.id, status: "running" };
   }
 }

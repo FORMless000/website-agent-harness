@@ -17,14 +17,56 @@ const fetcher = mockTransport([
   [submission(artifact("A smaller, stranger museum"), "edit")],
   [submission(artifact("Mobile museum"), "mobile")],
 ]);
+const manualDriver = createDriver(fetcher);
+const automaticCalls = new Map<string, number>();
 const server = await serve(
   new Harness(
     config,
-    createDriver(fetcher),
+    async (request) => {
+      const target =
+        typeof request.input === "string"
+          ? JSON.parse(request.input).subUrl
+          : /Target sub-URL: ([^\n]+)/.exec(
+              request.input.at(-1)?.content.at(-1)?.text ?? "",
+            )?.[1];
+      if (!target?.startsWith("/browser-auto")) return manualDriver(request);
+      const count = (automaticCalls.get(target) ?? 0) + 1;
+      automaticCalls.set(target, count);
+      if (target === "/browser-auto/progress") {
+        await request.emit("provider.event", {
+          type: "response.reasoning_text.delta",
+          delta: "private reasoning fixture",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        await request.emit("provider.event", {
+          type: "response.output_item.added",
+          item: { type: "function_call", name: "submit_website" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+      } else await new Promise((resolve) => setTimeout(resolve, 800));
+      if (target === "/browser-auto/failure" && count === 1)
+        throw new Error("Offline browser failure fixture");
+      const page = artifact(`Automatic ${target}`);
+      page.html = page.html.replace(
+        "</body>",
+        '<a href="/browser-auto/child">Explore child</a><a href="/browser-auto/preview">Explore preview child</a><a href="/browser-auto/archive-child">Explore archive child</a></body>',
+      );
+      return {
+        artifact: page,
+        staged: [],
+        text: "Offline automatic fixture",
+        pageDescription: "Automatic navigation fixture",
+      };
+    },
     async () => catalog,
     async (_config, record, signal, emit) => {
       await emit("request", { body: { input: record.context } });
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          record.input.path === "/browser-auto/progress" ? 1800 : 150,
+        ),
+      );
       signal.throwIfAborted();
       await emit("usage", { inputTokens: 100, outputTokens: 40 });
       return {
@@ -32,13 +74,15 @@ const server = await serve(
         similarity: "insufficient_evidence",
         rationale: "Fixture evidence",
         relevantNeighbors: [],
-        externalReferences: [
-          {
-            url: "https://example.org/reference",
-            reason: "Fixture reference",
-            provenance: "Mocked search",
-          },
-        ],
+        externalReferences: record.input.path.startsWith("/browser-auto")
+          ? []
+          : [
+              {
+                url: "https://example.org/reference",
+                reason: "Fixture reference",
+                provenance: "Mocked search",
+              },
+            ],
         referenceRecommendation: {
           action: record.input.allowReferenceSuggestions ? "clear" : "retain",
           reference: null,

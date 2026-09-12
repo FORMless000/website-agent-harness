@@ -199,6 +199,8 @@ textarea::placeholder {
   margin-bottom: 5px;
 }
 .session small {
+  display: block;
+  line-height: 1.5;
   color: var(--muted);
   font-size: 10px;
 }

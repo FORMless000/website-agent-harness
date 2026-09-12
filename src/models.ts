@@ -10,6 +10,11 @@ export const MODEL_REGISTRY = [
     label: "DeepSeek V4 Pro 0813",
     id: "deepseek/deepseek-v4-pro-0813",
   },
+  {
+    number: 6,
+    label: "DeepSeek V4.1 Flash",
+    id: "deepseek/deepseek-v4.1-flash",
+  },
 ] as const;
 export const effortSchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
 export type Effort = z.infer<typeof effortSchema>;
@@ -36,7 +41,7 @@ export function resolveModel(input: string | number) {
   );
   if (!model)
     throw new Error(
-      "Select a registered model number (1–5) or its exact slug.",
+      "Select a registered model number (1–6) or its exact slug.",
     );
   return model;
 }

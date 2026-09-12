@@ -95,7 +95,10 @@ test("HTTP publishing, version preview, security, SSE replay and CLI clients", a
       /script-src 'none'/,
     );
     assert.match(await page.text(), /A tiny museum/);
-    assert.equal((await fetch(origin + "/not-created")).status, 404);
+    assert.equal(
+      (await fetch(origin + "/not-created", { method: "HEAD" })).status,
+      404,
+    );
     const preview = await fetch(
       origin + `/api/preview/${created.session.id}/${run.versionId}`,
     );

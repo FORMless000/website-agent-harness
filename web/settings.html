@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Vibenet · Automatic settings</title>
+    <link rel="stylesheet" href="/_settings/settings.css" />
+    <script type="module" src="/_settings/settings.js"></script>
+  </head>
+  <body>
+    <header>
+      <a href="/_harness/">← Website laboratory</a>
+      <h1>Automatic generation</h1>
+      <p>
+        Settings for unexplored URLs. Changes apply to new attempts; manual
+        tasks keep their own choices.
+      </p>
+    </header>
+    <main>
+      <p id="notice" role="status"></p>
+      <form id="settings-form">
+        <fieldset>
+          <legend>Generation</legend>
+          <label class="check"
+            ><input name="enabled" type="checkbox" />Generate unexplored
+            pages</label
+          >
+          <label class="check"
+            ><input name="descriptionEnabled" type="checkbox" />Use the
+            description agent</label
+          >
+          <div class="columns">
+            <fieldset>
+              <legend>Website model</legend>
+              <label>Model<select name="websiteModel"></select></label
+              ><label
+                >Reasoning effort<select name="websiteEffort"></select
+              ></label>
+            </fieldset>
+            <fieldset id="description-controls">
+              <legend>Description model</legend>
+              <label>Model<select name="descriptionModel"></select></label
+              ><label
+                >Reasoning effort<select name="descriptionEffort"></select
+              ></label>
+            </fieldset>
+          </div>
+        </fieldset>
+        <details open>
+          <summary>References</summary>
+          <fieldset id="search-controls">
+            <legend>External search</legend>
+            <label class="check"
+              ><input name="searchEnabled" type="checkbox" />Allow external
+              reference search</label
+            >
+            <p>
+              Validated suggestions are used automatically. Search is available
+              only with the description agent.
+            </p>
+            <div class="columns">
+              <label
+                >Maximum searches<input
+                  name="populationSearches"
+                  type="number"
+                  min="1"
+                  step="1"
+                  required /></label
+              ><label
+                >Results per search<input
+                  name="populationSearchResults"
+                  type="number"
+                  min="1"
+                  max="25"
+                  step="1"
+                  required
+              /></label>
+            </div>
+          </fieldset>
+          <div class="columns">
+            <label
+              >Internal reference compression<select
+                name="internalCompression"
+              ></select></label
+            ><label
+              >External reference compression<select
+                name="externalCompression"
+              ></select
+            ></label>
+          </div>
+          <p>
+            The referring page is preferred, followed by the nearest same-site
+            page, then the nearest page across the project.
+          </p>
+        </details>
+        <details>
+          <summary>Images</summary>
+          <div class="columns">
+            <label
+              >Asset mode<select name="assets">
+                <option value="none">None</option>
+                <option value="openverse">Openverse</option>
+                <option value="generated">Generated</option>
+                <option value="both">Both</option>
+              </select></label
+            >
+            <label>Image model<input name="imageModel" required /></label>
+            <label
+              >Maximum asset attempts per run<input
+                name="maxAssets"
+                type="number"
+                min="1"
+                step="1"
+                required
+            /></label>
+          </div>
+        </details>
+        <details>
+          <summary>Advanced execution</summary>
+          <p>
+            Operational limits per stage, not token budgets. A retry of an
+            existing session retains its original website model and
+            conversation.
+          </p>
+          <div class="columns">
+            <label
+              >Maximum model steps<input
+                name="maxSteps"
+                type="number"
+                min="1"
+                step="1"
+                required
+            /></label>
+            <label
+              >Stage timeout (milliseconds)<input
+                name="timeoutMs"
+                type="number"
+                min="1"
+                max="2147483647"
+                step="1"
+                required
+            /></label>
+          </div>
+        </details>
+        <div class="actions">
+          <button type="submit">Save settings</button
+          ><button type="button" id="reload">Reload saved settings</button>
+        </div>
+      </form>
+      <details>
+        <summary>Prompt and context resources</summary>
+        <p>
+          <a href="/_harness/?prompts=1"
+            >Edit system prompts in the laboratory</a
+          >
+        </p>
+        <p>World knowledge is edited directly in this file:</p>
+        <code id="knowledge-location"></code>
+        <pre id="knowledge"></pre>
+      </details>
+      <details>
+        <summary>Server information</summary>
+        <pre id="server"></pre>
+      </details>
+      <section>
+        <h2>Automatic attempts</h2>
+        <button id="refresh-attempts">Refresh attempts</button>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Page</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Inspect</th>
+              </tr>
+            </thead>
+            <tbody id="attempts"></tbody>
+          </table>
+        </div>
+        <p id="attempts-notice" role="status"></p>
+      </section>
+    </main>
+  </body>
+</html>

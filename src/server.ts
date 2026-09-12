@@ -6,6 +6,9 @@ import {
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { AutomaticPages } from "./automatic.js";
+import { settingsSchema } from "./settings.js";
+import { requireCapability } from "./models.js";
 import { Harness } from "./harness.js";
 import { MODEL_REGISTRY } from "./models.js";
 import { publicConfig } from "./config.js";
@@ -34,7 +37,102 @@ function json(response: ServerResponse, value: unknown, status = 200) {
   });
   response.end(JSON.stringify(value));
 }
-export function createHttpServer(harness: Harness) {
+function escapeHtml(value: string) {
+  return value.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ]!,
+  );
+}
+function rebaseNavigation(html: string, pagePath: string, origin: string) {
+  const document = parse(html);
+  // Only navigation is rebased; immutable artifacts and the generated CSP stay intact.
+  walk(document, (node) => {
+    if (!("tagName" in node) || !["a", "area"].includes(node.tagName)) return;
+    for (const attribute of node.attrs) {
+      if (attribute.name !== "href" || attribute.value.startsWith("#"))
+        continue;
+      try {
+        const resolved = new URL(attribute.value, origin + pagePath);
+        attribute.value =
+          resolved.origin === origin
+            ? resolved.pathname + resolved.search + resolved.hash
+            : resolved.href;
+      } catch {}
+    }
+  });
+  return serialize(document);
+}
+function eligibleNavigation(request: IncomingMessage, route: string) {
+  const destination = request.headers["sec-fetch-dest"];
+  if (destination && !["document", "iframe"].includes(String(destination)))
+    return false;
+  if (
+    /prefetch|prerender/i.test(
+      String(request.headers.purpose ?? "") +
+        String(request.headers["sec-purpose"] ?? ""),
+    )
+  )
+    return false;
+  if (
+    request.headers.accept &&
+    !/text\/html|\*\/\*/i.test(request.headers.accept)
+  )
+    return false;
+  return !/\.(?:css|js|mjs|map|json|xml|txt|ico|png|jpe?g|gif|webp|svg|avif|woff2?|ttf|mp[34]|webm|pdf)$/i.test(
+    route,
+  );
+}
+async function loadingPage(
+  harness: Harness,
+  response: ServerResponse,
+  pagePath: string,
+  attempt: {
+    id: string;
+    status: string;
+    startedAt?: string;
+    finishedAt?: string;
+  } | null,
+  iframe: boolean,
+) {
+  const failed = !attempt || attempt.status === "failed";
+  response.setHeader(
+    "Content-Security-Policy",
+    DASHBOARD_CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'"),
+  );
+  response.setHeader("Content-Type", "text/html; charset=utf-8");
+  let html = await readFile(
+    path.join(harness.config.root, "web", "loading.html"),
+    "utf8",
+  );
+  html = html
+    .replace("__ATTEMPT__", escapeHtml(attempt?.id ?? ""))
+    .replace("__STARTED__", escapeHtml(attempt?.startedAt ?? ""))
+    .replace("__FINISHED__", escapeHtml(attempt?.finishedAt ?? ""))
+    .replace("__PROGRESS__", failed ? "hidden" : "")
+    .replace("__STATUS__", failed ? "failed" : "running")
+    .replace("__MESSAGE__", failed ? "Unable to load this page" : "Loading…")
+    .replace("__RETRY__", attempt && failed && !iframe ? "" : "hidden")
+    .replace(
+      "__FALLBACK__",
+      iframe
+        ? `<p><a href="${escapeHtml(pagePath)}" target="_blank" rel="noopener">Open page</a></p>`
+        : `<noscript><p><a href="${escapeHtml(pagePath)}">Reload page</a></p></noscript>`,
+    );
+  if (iframe)
+    html = html.replace(
+      '<script type="module" src="/_settings/loading.js"></script>',
+      failed ? "" : '<meta http-equiv="refresh" content="2">',
+    );
+  response.statusCode = attempt ? 200 : 503;
+  response.end(html);
+}
+export function createHttpServer(
+  harness: Harness,
+  automatic = new AutomaticPages(harness),
+) {
   return createServer(async (request, response) => {
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Referrer-Policy", "no-referrer");
@@ -68,6 +166,12 @@ export function createHttpServer(harness: Harness) {
         return;
       }
       const staticFiles: Record<string, [string, string]> = {
+        "/_settings": ["settings.html", "text/html"],
+        "/_settings/": ["settings.html", "text/html"],
+        "/_settings/settings.js": ["settings.js", "text/javascript"],
+        "/_settings/settings.css": ["settings.css", "text/css"],
+        "/_settings/loading.js": ["loading.js", "text/javascript"],
+        "/_settings/progress.js": ["progress.js", "text/javascript"],
         "/_harness/": ["index.html", "text/html"],
         "/_harness": ["index.html", "text/html"],
         "/_harness/app.js": ["app.js", "text/javascript"],
@@ -82,19 +186,101 @@ export function createHttpServer(harness: Harness) {
         );
         return;
       }
+      if (route === "/api/settings" && method === "GET")
+        return json(response, {
+          ...(await automatic.settings.get()),
+          models: MODEL_REGISTRY,
+          ...(await automatic.settings.resources()),
+        });
+      if (route === "/api/settings" && method === "PUT") {
+        const input = z
+          .object({ settings: settingsSchema, revision: z.string() })
+          .strict()
+          .parse(await body(request));
+        if (input.settings.enabled) {
+          const catalog = await harness.capabilities();
+          requireCapability(
+            catalog,
+            input.settings.websiteModel,
+            input.settings.websiteEffort,
+          );
+          if (input.settings.descriptionEnabled)
+            requireCapability(
+              catalog,
+              input.settings.descriptionModel,
+              input.settings.descriptionEffort,
+            );
+        }
+        return json(response, await automatic.settings.save(input));
+      }
+      if (route === "/api/automatic" && method === "GET")
+        return json(
+          response,
+          redact(await automatic.list(), harness.config.apiKey),
+        );
+      const automaticRoute =
+        /^\/api\/automatic\/([\w-]+)(?:\/(status|retry))?$/.exec(route);
+      if (automaticRoute) {
+        const record = await automatic.get(automaticRoute[1]);
+        if (method === "GET")
+          return json(
+            response,
+            automaticRoute[2] === "status"
+              ? await automatic.progress(record.id)
+              : redact(record, harness.config.apiKey),
+          );
+        if (method === "POST" && automaticRoute[2] === "retry") {
+          const next = await automatic.ensure(
+            record.path,
+            record.referringUrl,
+            record.id,
+          );
+          return json(
+            response,
+            next
+              ? { id: next.id, status: next.status }
+              : { error: "Automatic generation is disabled." },
+            next ? 202 : 503,
+          );
+        }
+      }
       if (route === "/api/bootstrap" && method === "GET")
         return json(response, {
           config: publicConfig(harness.config),
           models: MODEL_REGISTRY,
           descriptions: await indexDescriptions(harness.store),
-          sessions: (await harness.store.sessions()).filter((session) => {
-            const filter = url.searchParams.get("filter") ?? "all";
-            return filter === "archived"
-              ? !!session.archived
-              : filter === "active"
-                ? !session.archived
-                : true;
-          }),
+          sessions: await Promise.all(
+            (await harness.store.sessions())
+              .filter((session) => {
+                const filter = url.searchParams.get("filter") ?? "all";
+                return filter === "archived"
+                  ? !!session.archived
+                  : filter === "active"
+                    ? !session.archived
+                    : true;
+              })
+              .map(async (session) => {
+                const runId = session.runs.at(-1);
+                const run = runId
+                  ? await harness.store
+                      .run(runId)
+                      .catch((error: NodeJS.ErrnoException) => {
+                        if (error.code === "ENOENT") return undefined;
+                        throw error;
+                      })
+                  : undefined;
+                return {
+                  ...session,
+                  lastRun: run
+                    ? {
+                        status: run.status,
+                        startedAt: run.startedAt,
+                        finishedAt: run.finishedAt,
+                      }
+                    : null,
+                };
+              }),
+          ),
           active: [...harness.active.values()].map((a) => a.runId),
         });
       if (route === "/api/models" && method === "GET")
@@ -241,7 +427,11 @@ export function createHttpServer(harness: Harness) {
         );
         response.setHeader("Content-Type", "text/html; charset=utf-8");
         response.setHeader("Content-Security-Policy", SITE_CSP);
-        response.end(version.servedHtml);
+        response.setHeader("Referrer-Policy", "same-origin");
+        const session = await harness.store.session(previewRoute[1]!);
+        response.end(
+          rebaseNavigation(version.servedHtml, session.path, `http://${host}`),
+        );
         return;
       }
       const runRoute = /^\/api\/runs\/([\w-]+)(?:\/(events|cancel))?$/.exec(
@@ -336,36 +526,17 @@ export function createHttpServer(harness: Harness) {
         if (!session.archived || session.archived.url !== decodeURI(route))
           return json(response, { error: "Archive not found" }, 404);
         const version = await harness.store.version(match[1], match[2]);
-        const document = parse(version.servedHtml);
-        // Rebase only navigation, without modifying immutable stored HTML or CSP.
-        walk(document, (node) => {
-          if (
-            !("tagName" in node) ||
-            (node.tagName !== "a" && node.tagName !== "area")
-          )
-            return;
-          for (const a of node.attrs)
-            if (a.name === "href" && !a.value.startsWith("#")) {
-              try {
-                const resolved = new URL(
-                  a.value,
-                  `http://127.0.0.1:${harness.config.port}${session.path}`,
-                );
-                a.value =
-                  resolved.origin === `http://127.0.0.1:${harness.config.port}`
-                    ? resolved.pathname + resolved.search + resolved.hash
-                    : resolved.href;
-              } catch {}
-            }
-        });
         response.setHeader("Content-Type", "text/html; charset=utf-8");
         response.setHeader("Content-Security-Policy", SITE_CSP);
-        response.end(serialize(document));
+        response.setHeader("Referrer-Policy", "same-origin");
+        response.end(
+          rebaseNavigation(version.servedHtml, session.path, `http://${host}`),
+        );
         return;
       }
       if (
         method === "GET" &&
-        !/^\/(api|_harness|_assets|_archive)(\/|$)/.test(route)
+        !/^\/(api|_harness|_settings|_assets|_archive)(\/|$)/.test(route)
       ) {
         const session = await harness.store.byPath(normalizePath(route));
         if (session?.currentVersion) {
@@ -375,15 +546,29 @@ export function createHttpServer(harness: Harness) {
           );
           response.setHeader("Content-Type", "text/html; charset=utf-8");
           response.setHeader("Content-Security-Policy", SITE_CSP);
+          response.setHeader("Referrer-Policy", "same-origin");
           response.end(version.servedHtml);
+          return;
+        }
+        if (eligibleNavigation(request, route)) {
+          const attempt = await automatic.ensure(
+            normalizePath(route),
+            request.headers.referer ?? null,
+          );
+          await loadingPage(
+            harness,
+            response,
+            normalizePath(route),
+            attempt,
+            request.headers["sec-fetch-dest"] === "iframe",
+          );
           return;
         }
       }
       json(
         response,
         {
-          error:
-            "Not found. Pages are generated only through an explicit session request.",
+          error: "Not found.",
         },
         404,
       );
@@ -410,11 +595,11 @@ export function createHttpServer(harness: Harness) {
 // from a crashed process can be reclaimed, but old session data is retained.
 export async function serve(harness: Harness) {
   const collisions = (await harness.store.sessions()).filter(
-    (s) => !s.archived && /^\/_archive(\/|$)/.test(s.path),
+    (s) => !s.archived && /^\/(_archive|_settings)(\/|$)/.test(s.path),
   );
   if (collisions.length)
     throw new Error(
-      `Archive namespace conflicts with existing pages: ${collisions.map((s) => s.path).join(", ")}. Resolve explicitly before starting.`,
+      `Reserved namespace conflicts with existing pages: ${collisions.map((s) => s.path).join(", ")}. Resolve explicitly before starting.`,
     );
   await mkdir(harness.config.dataDir, { recursive: true });
   const lock = path.join(harness.config.dataDir, "server.lock");
@@ -434,9 +619,11 @@ export async function serve(harness: Harness) {
     await unlink(lock);
     await writeFile(lock, String(process.pid), { flag: "wx", mode: 0o600 });
   }
-  const server = createHttpServer(harness);
+  const automatic = new AutomaticPages(harness);
+  const server = createHttpServer(harness, automatic);
   try {
     await harness.store.recoverInterrupted();
+    await automatic.initialize();
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(harness.config.port, "127.0.0.1", resolve);
@@ -448,6 +635,7 @@ export async function serve(harness: Harness) {
   return {
     server,
     close: async () => {
+      await automatic.close();
       for (const active of harness.active.values())
         active.controller.abort(new Error("Server shutting down."));
       await Promise.allSettled([...harness.active.values()].map((a) => a.done));

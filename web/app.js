@@ -1,5 +1,6 @@
 const $ = (id) => document.getElementById(id);
 let preparationId;
+import { updateProgress, tick } from "/_settings/progress.js";
 import { initializePopulation } from "./population.js";
 const compressionLevels = [
   ["clean", "Clean"],
@@ -51,6 +52,24 @@ function option(value, label) {
   el.textContent = label;
   return el;
 }
+function elapsedLabel(run) {
+  if (!run) return "Last run: —";
+  const elapsed =
+    (run.finishedAt
+      ? Date.parse(run.finishedAt)
+      : run.status === "running"
+        ? Date.now()
+        : NaN) - Date.parse(run.startedAt);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return "Last run: —";
+  const seconds = Math.floor(elapsed / 1000);
+  const duration =
+    seconds < 1
+      ? "<1s"
+      : seconds < 60
+        ? `${seconds}s`
+        : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  return `Last run: ${duration}${run.status === "running" ? " (running)" : ""}`;
+}
 async function refresh() {
   bootstrap = await api("/bootstrap");
   const selectedRef = $("internal-reference").value;
@@ -91,7 +110,11 @@ async function refresh() {
         title.textContent = s.path;
         const detail = document.createElement("small");
         detail.textContent = `${bootstrap.models.find((m) => m.id === s.model)?.label ?? s.model} · ${s.versions.length} versions`;
-        button.append(title, detail);
+        const elapsed = document.createElement("small");
+        elapsed.textContent = elapsedLabel(s.lastRun);
+        elapsed.title =
+          "Elapsed time of the latest website generation/edit run, updated when the session list refreshes.";
+        button.append(title, detail, elapsed);
         button.onclick = guarded(() => selectSession(s.id));
         return button;
       }),
@@ -715,6 +738,8 @@ await guarded(async () => {
     );
   }
   if (location.hash) await selectSession(location.hash.slice(1));
+  if (new URLSearchParams(location.search).get("prompts") === "1")
+    $("prompt-toggle").click();
 })();
 const populationUI = initializePopulation(
   api,
@@ -723,3 +748,52 @@ const populationUI = initializePopulation(
   () => bootstrap,
   () => catalog,
 );
+
+// The preview remains script-disabled. The trusted parent can follow its loading
+// shell and provide an ordinary Open page action without relaxing that sandbox.
+let previewNavigation = 0;
+let previewClock;
+$("preview").addEventListener("load", () => {
+  clearInterval(previewClock);
+  const navigation = ++previewNavigation;
+  const frame = $("preview");
+  try {
+    const url = new URL(frame.contentWindow.location.href);
+    const doc = frame.contentDocument;
+    const id = doc?.body?.dataset.attempt;
+    if (
+      url.origin !== location.origin ||
+      !id ||
+      !doc.body.classList.contains("loading")
+    )
+      return;
+    $("open-page").href = url.href;
+    tick(doc);
+    previewClock = setInterval(() => tick(doc), 1000);
+    const open = doc.querySelector('a[target="_blank"]');
+    if (open)
+      open.onclick = (event) => {
+        event.preventDefault();
+        window.open(url.href, "_blank", "noopener");
+      };
+    const poll = async () => {
+      if (navigation !== previewNavigation) return;
+      try {
+        const record = await api(`/automatic/${encodeURIComponent(id)}/status`);
+        if (navigation !== previewNavigation) return;
+        updateProgress(doc, record);
+        if (record.status !== "running") {
+          clearInterval(previewClock);
+          frame.src = url.href;
+          return;
+        }
+        setTimeout(poll, 1000);
+      } catch {
+        /* The shell's Open page link remains available. */
+      }
+    };
+    if (doc.body.dataset.status === "running") void poll();
+  } catch {
+    /* Cross-origin frames are not inspected. */
+  }
+});
