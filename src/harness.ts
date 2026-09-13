@@ -33,6 +33,7 @@ import { Prompts } from "./prompts.js";
 import { captureParent } from "./network.js";
 import { renderArtifact, validateArtifact } from "./validation.js";
 import { initialContext, prepareParent } from "./context.js";
+import { Settings } from "./settings.js";
 
 export type GenerationPhase = "preparing" | "reasoning" | "response";
 
@@ -315,6 +316,7 @@ export class Harness {
     const instructions = [
       "system.md",
       "assets.md",
+      "regions.md",
       "style-decision.md",
       "page-description.md",
       "initial-generation.md",
@@ -445,6 +447,7 @@ export class Harness {
           ? [
               "system.md",
               "assets.md",
+              "regions.md",
               "style-decision.md",
               ...(session.submissionVersion === 3
                 ? ["page-description.md"]
@@ -452,14 +455,19 @@ export class Harness {
               phase,
             ]
           : freshInitial
-            ? ["system.md", "assets.md", phase]
-            : ["system.md", phase, "assets.md"];
+            ? ["system.md", "assets.md", "regions.md", phase]
+            : ["system.md", phase, "assets.md", "regions.md"];
       const selected = names.map(
         (name) => prompts.find((p) => p.name === name)!,
       );
-      const instructions = selected
-        .map((p) => `# ${p.name}\n${p.content}`)
-        .join("\n\n");
+      const interactionSettings = await new Settings(config).get();
+      const interactionPreference = interactionSettings.settings
+        .interactionJavascript
+        ? "\n\nInteraction JavaScript preference: enabled. Region javascript may be supplied and is executed only inside its opaque region frame through the local region API."
+        : "\n\nInteraction JavaScript preference: disabled. Set every region javascript field to null; use native HTML behavior only.";
+      const instructions =
+        selected.map((p) => `# ${p.name}\n${p.content}`).join("\n\n") +
+        interactionPreference;
       const previous = session.currentVersion
         ? await this.store.version(session.id, session.currentVersion)
         : undefined;

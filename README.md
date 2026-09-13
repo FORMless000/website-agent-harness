@@ -2,7 +2,7 @@
 
 A small, local research harness for generating and iterating on toy websites. New implementation; the previous `progressively-materialized-web-poc` is not used or modified.
 
-Uses **OpenRouter Agent SDK 0.11.0**, its compatible client, TypeScript, a Node HTTP server, and a plain HTML/CSS/JS control interface. Generated websites themselves are **HTML/CSS only**, with optional local raster images or inline SVG. No framework build or generated JavaScript.
+Uses **OpenRouter Agent SDK 0.11.0**, its compatible client, TypeScript, a Node HTTP server, and a plain HTML/CSS/JS control interface. Generated page documents are **HTML/CSS**, with optional local raster images, inline SVG, and minimal interactive regions. Regions use native controls plus model-generated state transitions by default; optional initial JavaScript runs inside isolated region frames. No framework build is required.
 
 ## Run
 
@@ -143,7 +143,7 @@ data/                ignored local experiment records
   smoke/             opt-in live model test reports
 ```
 
-The model can only propose artifacts or invoke enabled image tools. Generated scripts, event handlers, executable URLs, remote resources, frames, plugins, navigation bases, and form destinations are rejected. A restrictive CSP and script-disabled iframe provide a second boundary. Inline SVG and CSS remain expressive, but this is a research prototype—not a hardened multi-user hosting service. HTML/CSS validity does not prove design quality, accessibility, factual accuracy, or browser-perfect rendering.
+The model can only propose artifacts or invoke enabled image tools. Scripts in generated HTML, event handlers, executable URLs, remote resources, authored frames, plugins, navigation bases, and form destinations are rejected. Static pages remain script-disabled. Interactive pages permit a nonce-authorized trusted bridge; initial region JavaScript runs only in opaque script-enabled child frames without network access or host DOM access. Inline SVG and CSS remain expressive, but this is a research prototype—not a hardened multi-user hosting service. HTML/CSS validity does not prove design quality, accessibility, factual accuracy, or browser-perfect rendering.
 
 The control API has loopback binding, Host checks, and same-origin/custom-header write protection, but **no authentication**. Do not expose it through a tunnel or reverse proxy. Anyone/process with access to your machine may read local traces and source. `.env` is ignored; request headers are not logged; known key patterns are redacted in traces. Descriptions, parent source, image prompts, and complete conversation history are sent to the selected API provider. Failed edits preserve the published page. Interrupted runs are marked failed on server restart; a subsequent edit can continue. Never run a second server against the same data directory.
 
@@ -205,7 +205,7 @@ npm run harness -- archive SESSION_ID --version VERSION_ID
 
 API: `POST /api/prepare` accepts the creation fields and returns `preparationId` plus comparisons. Creation accepts `internalReference: {sessionId, versionId}`, `internalCompression`, ordered `externalReferences: [{url, compression}]`, and optional `preparationId`. Level values are `clean`, `structure`, `relevant`, `brief`. Do not mix these with legacy parent fields. `POST /api/sessions/:id/archive` takes `{versionId}`. `GET /api/bootstrap?filter=active|archived|all` filters sessions (default all for compatibility).
 
-Interactive generated widgets, search behavior, and language switching are not implemented. No paid generation or live cache/quality experiment is part of these changes.
+Generated interactive regions support model-driven controls, including invented search suggestions and destinations. No paid generation or live cache/quality experiment is part of these changes.
 
 ## Automatic visits and live settings
 
@@ -213,12 +213,51 @@ An unexplored page GET starts one shared attempt per normalized path: resolve an
 
 A local referring URL selects its published version; archive and preview URLs select their exact version. Otherwise, choose the nearest active published page by path-tree distance, preferring the same first segment, then falling back across the project. Lexical path breaks ties. Empty projects use no reference. Generated and preview responses send same-origin referrers, never external ones. Missing/hidden referrers use the neighbor fallback. The reference is pinned for the attempt, and population cannot replace it.
 
-Root still opens the laboratory. API, harness, settings, asset, and archive namespaces are reserved. HEAD, non-GET, prefetch, non-document resource requests, and common resource-file URLs never generate pages. Query strings share the pathname's page; fragments remain browser state. Sandboxed preview loading uses a script-free fallback; open the page directly for visitor Retry controls. Generated HTML remains script-free with the same CSP.
+Root still opens the laboratory. API, harness, settings, asset, and archive namespaces are reserved. HEAD, non-GET, prefetch, non-document resource requests, and common resource-file URLs never generate pages. Query strings share the pathname's page; fragments remain browser state. Sandboxed preview loading uses a script-free fallback; open the page directly for visitor Retry controls. Generated HTML remains script-free; interactive documents additionally load the trusted region bridge.
 
-`/_settings` applies only to automatic visits. Main controls select generation/description/search switches and independent website/description models and efforts. Expand references, images, and advanced execution to set compression, search limits, existing image modes/model/attempt limits, model steps, and stage timeout in milliseconds. Prompts link to the existing editor; world knowledge and startup configuration are shown read-only. The initial models are DeepSeek V4.1 Flash/low, population/search are on, compression is Clean, and other execution settings inherit startup values. Disabling generation stops new attempts, not active ones or published pages.
+`/_settings` configures automatic visits and interactive regions. Interaction model/effort apply to all new page visits, and the initial JavaScript preference applies to manual and automatic page generation. Main controls select generation/description/search switches and independent website/description models and efforts. Expand references, images, and advanced execution to set compression, search limits, existing image modes/model/attempt limits, model steps, and stage timeout in milliseconds. Prompts link to the existing editor; world knowledge and startup configuration are shown read-only. The initial models are DeepSeek V4.1 Flash/low, population/search are on, compression is Clean, and other execution settings inherit startup values. Disabling generation stops new attempts, not active ones or published pages.
 
-Settings are saved atomically in `data/automatic-settings.json` with revision conflict checks. Every attempt snapshots effective settings; saving does not change active work or manual configuration. Invalid settings are rejected. Interrupted attempts are failed on restart and wait for explicit retry. Run only one server per data directory, as before.
+Settings are saved atomically in `data/automatic-settings.json` with revision conflict checks. Every attempt snapshots effective settings; saving does not change active automatic attempts or existing region visits. Manual page model configuration remains separate. Invalid settings are rejected. Interrupted attempts are failed on restart and wait for explicit retry. Run only one server per data directory, as before.
 
 `data/automatic/<id>/record.json` links path, selected reference/reason, settings, warnings, population ID, session ID and run ID. The settings page lists attempts and links existing session/trace inspectors. Population events and ordinary generation events/input snapshots remain in their existing locations. Output page descriptions are still recorded even when the input description stage is disabled.
 
 API additions: `GET /api/settings` returns settings, revision, models, and read-only resources. `PUT /api/settings` takes `{settings, revision}` using the existing JSON/custom-header write protection. `GET /api/automatic` lists backend records; `GET /api/automatic/:id` reads one. The loading shell polls `GET /api/automatic/:id/status` (ID, status, stage and attempt timestamps only); `POST /api/automatic/:id/retry` explicitly retries a failed attempt. No new generation service, queue, deployment, or CLI workflow is introduced.
+
+## Minimal interactive regions
+
+Page artifacts may include `regions`: up to 16 independent definitions with `id`,
+`purpose`, initial fragment `html`, nullable `css`, JSON-object `state`, and nullable
+`javascript`. Each has one empty `<div data-region-id="id"></div>` in the page.
+The page generator authors all initial region content in its normal submission;
+opening the page makes no interaction-model call. Existing artifacts without
+regions continue to work and are not rewritten.
+
+Controls declare `data-region-action="action"`; forms submit and buttons activate
+that action. Inputs explicitly opt into debounced events with
+`data-region-event="input"` or `"change"`. Named control values and the region state
+are sent to the independent interaction agent. Each response replaces only that
+region's fragment, CSS and state. The server sends the agent its purpose, initial
+JavaScript (if any), complete region history, and latest event; no surrounding page
+or sibling history is included. Failed requests preserve the displayed UI.
+
+Settings expose an interaction model and reasoning effort (default DeepSeek V4.1
+Flash/low) and an initial JavaScript generation preference (default off). The
+preference changes generation instructions, not validation. Initial JavaScript
+can use local DOM/canvas/timers and `region.root`, `region.state`,
+`region.setState(next)`, `region.dispatch(action)`, and
+`region.onUpdate(callback)`. It loads once per region instance and survives
+fragment replacements. Later model responses cannot include JavaScript. Use
+delegated handlers on the persistent root or rebind in `onUpdate`. Region styles
+are self-contained; page CSS does not cross the iframe boundary.
+
+Every document visit gets a fresh ID; navigation back, reloads, and separate tabs
+start from the published initial state. Histories and redacted request traces are
+retained under `data/visits/<visit-id>/` for inspection, without compression. They
+are not resumed on a new visit. Model settings are fixed for that visit.
+
+`POST /api/interactions/:visit/:region` accepts `{revision, event: {action, inputs,
+state}}`. Revisions serialize accepted updates; concurrent/stale requests receive 409. Responses contain `revision`, `html`, `css`, `state`, and `destinations`
+(`{path, description}` entries). The trusted bridge alone performs API writes.
+Clicking a local region link uses `POST .../navigate` with `{path}` and passes its
+declared description to the existing lazy page-generation flow. Merely generating
+a link does not generate its destination.

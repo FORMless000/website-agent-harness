@@ -33,6 +33,22 @@ export function normalizePath(value: string): string {
     throw new Error("This path is reserved; choose a non-root page path.");
   return result;
 }
+export const regionSchema = z
+  .object({
+    id: z
+      .string()
+      .regex(/^[a-zA-Z][\w-]*$/)
+      .describe("Stable region identifier used by its exact HTML placeholder."),
+    purpose: z.string(),
+    html: z
+      .string()
+      .describe("HTML fragment rendered inside the region frame."),
+    css: z.string().nullable(),
+    state: z.record(z.string(), z.json()),
+    javascript: z.string().nullable(),
+  })
+  .strict();
+export type Region = z.infer<typeof regionSchema>;
 export const artifactSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -46,6 +62,7 @@ export const artifactSchema = z
       .describe(
         "Optional complete CSS stylesheet, or null. Do not wrap in style tags.",
       ),
+    regions: z.array(regionSchema).max(16).optional(),
   })
   .strict();
 export type Artifact = z.infer<typeof artifactSchema>;

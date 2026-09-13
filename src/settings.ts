@@ -23,6 +23,9 @@ export const settingsSchema = z
     websiteEffort: effortSchema,
     descriptionModel: model,
     descriptionEffort: effortSchema,
+    interactionModel: model,
+    interactionEffort: effortSchema,
+    interactionJavascript: z.boolean(),
     searchEnabled: z.boolean(),
     internalCompression: compressionSchema,
     externalCompression: compressionSchema,
@@ -45,6 +48,9 @@ export function defaultSettings(config: Config): AutomaticSettings {
     websiteEffort: "low",
     descriptionModel: "deepseek/deepseek-v4.1-flash",
     descriptionEffort: "low",
+    interactionModel: "deepseek/deepseek-v4.1-flash",
+    interactionEffort: "low",
+    interactionJavascript: false,
     internalCompression: "clean",
     externalCompression: "clean",
     assets: config.assets,
@@ -89,9 +95,14 @@ export class Settings {
   async get() {
     let settings: AutomaticSettings;
     try {
-      settings = settingsSchema.parse(
-        JSON.parse(await readFile(this.file, "utf8")),
-      );
+      const saved = JSON.parse(await readFile(this.file, "utf8"));
+      const defaults = defaultSettings(this.config);
+      settings = settingsSchema.parse({
+        interactionModel: defaults.interactionModel,
+        interactionEffort: defaults.interactionEffort,
+        interactionJavascript: defaults.interactionJavascript,
+        ...saved,
+      });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       settings = defaultSettings(this.config);

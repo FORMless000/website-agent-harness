@@ -1,4 +1,4 @@
-import { parse as parseHtml } from "parse5";
+import { parse as parseHtml, parseFragment } from "parse5";
 import * as cssTree from "css-tree";
 import { artifactSchema, type Artifact, type Asset } from "./contracts.js";
 import { walk } from "./network.js";
@@ -163,11 +163,33 @@ export function validateArtifact(
     "track",
   ]);
   const required = new Set(["html", "head", "body", "title"]);
+  const mounts: string[] = [];
   let doctype = false;
   walk(doc, (node) => {
     if (node.nodeName === "#documentType") doctype = true;
     if (!("tagName" in node)) return;
     const tag = node.tagName.toLowerCase();
+    const regionId = node.attrs.find((a) => a.name === "data-region-id");
+    if (regionId) {
+      mounts.push(regionId.value);
+      if (tag !== "div") errors.push("Use a div for each region placeholder.");
+      let ancestor = node.parentNode;
+      while (ancestor) {
+        if (ancestor.nodeName === "#document-fragment")
+          errors.push("Region placeholders cannot be inside templates.");
+        ancestor = "parentNode" in ancestor ? ancestor.parentNode : null;
+      }
+      if (
+        node.childNodes.some(
+          (child) =>
+            child.nodeName !== "#text" ||
+            ("value" in child && child.value.trim()),
+        )
+      )
+        errors.push(
+          "Region placeholders must be empty; put initial content in the region definition.",
+        );
+    }
     if (required.has(tag)) {
       required.delete(tag);
       if (!node.sourceCodeLocation?.startTag || !node.sourceCodeLocation.endTag)
@@ -176,6 +198,16 @@ export function validateArtifact(
     if (forbidden.has(tag)) errors.push(`<${tag}> is not allowed.`);
     for (const attr of node.attrs) {
       const name = attr.name.toLowerCase();
+      if (
+        name === "id" &&
+        [
+          "harness-regions",
+          "harness-region",
+          "region-root",
+          "region-style",
+        ].includes(attr.value)
+      )
+        errors.push(`ID ${attr.value} is reserved for the region runtime.`);
       if (
         /^on/.test(name) ||
         [
@@ -216,9 +248,54 @@ export function validateArtifact(
   if (!doctype) errors.push("Include <!doctype html>.");
   for (const tag of required) errors.push(`Missing <${tag}>.`);
   if (artifact.css) checkCss(artifact.css);
+  const definitions = artifact.regions ?? [];
+  if (new Set(definitions.map((r) => r.id)).size !== definitions.length)
+    errors.push("Region IDs must be unique.");
+  for (const region of definitions) {
+    if (mounts.filter((id) => id === region.id).length !== 1)
+      errors.push(
+        `Region ${region.id} requires exactly one data-region-id placeholder.`,
+      );
+    errors.push(
+      ...validateRegionContent(region, assets).map(
+        (error) => `Region ${region.id}: ${error}`,
+      ),
+    );
+  }
+  if (mounts.some((id) => !definitions.some((r) => r.id === id)))
+    errors.push("Every region placeholder requires a region definition.");
   return errors.length
     ? { errors: [...new Set(errors)] }
     : { artifact, errors: [] };
+}
+// Reuse the page resource/markup policy, but require a body fragment. Optional
+// JavaScript is a separate immutable field and never enters host-page markup.
+export function validateRegionContent(
+  region: { html: string; css: string | null },
+  assets: Asset[],
+): string[] {
+  if (/<\/?(?:html|head|body|title)\b|<!doctype/i.test(region.html))
+    return ["Use an HTML body fragment, not a document."];
+  if (/data-region-id\s*=/i.test(region.html))
+    return ["Regions cannot contain other regions."];
+  return validateArtifact(
+    {
+      schemaVersion: 1,
+      html: `<!doctype html><html><head><title>Region</title></head><body>${region.html}</body></html>`,
+      css: region.css,
+    },
+    assets,
+  ).errors;
+}
+
+export function regionActions(html: string): Set<string> {
+  const actions = new Set<string>();
+  walk(parseFragment(html), (node) => {
+    if (!("attrs" in node)) return;
+    const action = node.attrs.find((a) => a.name === "data-region-action");
+    if (action?.value) actions.add(action.value);
+  });
+  return actions;
 }
 export function renderArtifact(artifact: Artifact, assets: Asset[]) {
   let html = artifact.html;

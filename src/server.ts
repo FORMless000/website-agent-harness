@@ -6,6 +6,10 @@ import {
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { randomBytes } from "node:crypto";
+import { Interactions, StaleInteraction } from "./interactions.js";
+import type { Version } from "./contracts.js";
+import type { InteractionDriver } from "./interaction-agent.js";
 import { AutomaticPages } from "./automatic.js";
 import { settingsSchema } from "./settings.js";
 import { requireCapability } from "./models.js";
@@ -132,6 +136,7 @@ async function loadingPage(
 export function createHttpServer(
   harness: Harness,
   automatic = new AutomaticPages(harness),
+  interactions = new Interactions(harness),
 ) {
   return createServer(async (request, response) => {
     response.setHeader("X-Content-Type-Options", "nosniff");
@@ -150,6 +155,49 @@ export function createHttpServer(
       const url = new URL(request.url ?? "/", `http://${host}`);
       const route = url.pathname;
       const method = request.method ?? "GET";
+      const sendPage = async (
+        version: Version,
+        sessionId: string,
+        pagePath: string,
+        html: string,
+      ) => {
+        response.setHeader("Content-Type", "text/html; charset=utf-8");
+        response.setHeader("Referrer-Policy", "same-origin");
+        if (!version.artifact.regions?.length) {
+          response.setHeader("Content-Security-Policy", SITE_CSP);
+          response.end(html);
+          return;
+        }
+        const bootstrap = await interactions.create(
+          sessionId,
+          pagePath,
+          version,
+        );
+        const nonce = randomBytes(24).toString("base64");
+        response.setHeader(
+          "Content-Security-Policy",
+          SITE_CSP.replace("script-src 'none'", `script-src 'nonce-${nonce}'`)
+            .replace("connect-src 'none'", "connect-src 'self'")
+            .replace("frame-src 'none'", "frame-src 'self'")
+            .replace(
+              "sandbox allow-same-origin",
+              "sandbox allow-same-origin allow-scripts",
+            ),
+        );
+        const data = JSON.stringify({
+          ...bootstrap,
+          regions: bootstrap.regions.map(({ id, purpose }) => ({
+            id,
+            purpose,
+          })),
+        }).replace(/</g, "\\u003c");
+        response.end(
+          html.replace(
+            /<\/body\s*>/i,
+            `<script id="harness-regions" type="application/json" nonce="${nonce}">${data}</script><script nonce="${nonce}" src="/_harness/regions.js"></script></body>`,
+          ),
+        );
+      };
       if (!["GET", "HEAD"].includes(method)) {
         if (
           request.headers["x-harness-request"] !== "1" ||
@@ -177,6 +225,8 @@ export function createHttpServer(
         "/_harness/app.js": ["app.js", "text/javascript"],
         "/_harness/population.js": ["population.js", "text/javascript"],
         "/_harness/style.css": ["style.css", "text/css"],
+        "/_harness/regions.js": ["regions.js", "text/javascript"],
+        "/_harness/region-frame.js": ["region-frame.js", "text/javascript"],
       };
       if (staticFiles[route] && method === "GET") {
         const [file, mime] = staticFiles[route];
@@ -192,6 +242,65 @@ export function createHttpServer(
           models: MODEL_REGISTRY,
           ...(await automatic.settings.resources()),
         });
+      const regionFrame =
+        /^\/api\/region-(frame|script)\/([\w-]+)\/([\w-]+)$/.exec(route);
+      if (regionFrame && method === "GET") {
+        const [, kind, visitId, regionId] = regionFrame;
+        const { history, current } = await interactions.get(visitId, regionId);
+        if (kind === "script") {
+          response.setHeader("Content-Type", "text/javascript; charset=utf-8");
+          response.end(history.definition.javascript ?? "");
+          return;
+        }
+        const nonce = randomBytes(24).toString("base64");
+        response.setHeader("Content-Type", "text/html; charset=utf-8");
+        response.setHeader(
+          "Content-Security-Policy",
+          `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src http://${host} data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; sandbox allow-scripts`,
+        );
+        const data = JSON.stringify({
+          visitId,
+          id: regionId,
+          state: current.state,
+          revision: current.revision,
+        }).replace(/</g, "\\u003c");
+        response.end(
+          `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(history.definition.purpose)}</title><style>html,body{margin:0}#region-root{display:flow-root}</style><style id="region-style">${current.css ?? ""}</style></head><body><div id="region-root">${current.html}</div><script id="harness-region" type="application/json" nonce="${nonce}">${data}</script><script nonce="${nonce}" src="/_harness/region-frame.js"></script>${history.definition.javascript ? `<script nonce="${nonce}" src="/api/region-script/${visitId}/${regionId}"></script>` : ""}</body></html>`,
+        );
+        return;
+      }
+      const regionInteraction =
+        /^\/api\/interactions\/([\w-]+)\/([\w-]+)(\/navigate)?$/.exec(route);
+      if (regionInteraction && method === "POST") {
+        const [, visitId, regionId, navigate] = regionInteraction;
+        if (navigate) {
+          const destination = await interactions.navigation(
+            visitId,
+            regionId,
+            await body(request),
+          );
+          const existing = await harness.store.byPath(destination.path);
+          if (!existing?.currentVersion) {
+            const attempt = await automatic.ensure(
+              destination.path,
+              `http://${host}/api/preview/${destination.visit.sessionId}/${destination.visit.versionId}`,
+              undefined,
+              destination.description,
+            );
+            if (!attempt)
+              return json(
+                response,
+                { error: "Automatic generation is disabled." },
+                503,
+              );
+          }
+          return json(response, { url: destination.path });
+        }
+        return json(
+          response,
+          await interactions.transition(visitId, regionId, await body(request)),
+        );
+      }
       if (route === "/api/settings" && method === "PUT") {
         const input = z
           .object({ settings: settingsSchema, revision: z.string() })
@@ -203,6 +312,11 @@ export function createHttpServer(
             catalog,
             input.settings.websiteModel,
             input.settings.websiteEffort,
+          );
+          requireCapability(
+            catalog,
+            input.settings.interactionModel,
+            input.settings.interactionEffort,
           );
           if (input.settings.descriptionEnabled)
             requireCapability(
@@ -429,7 +543,10 @@ export function createHttpServer(
         response.setHeader("Content-Security-Policy", SITE_CSP);
         response.setHeader("Referrer-Policy", "same-origin");
         const session = await harness.store.session(previewRoute[1]!);
-        response.end(
+        await sendPage(
+          version,
+          session.id,
+          session.path,
           rebaseNavigation(version.servedHtml, session.path, `http://${host}`),
         );
         return;
@@ -529,7 +646,10 @@ export function createHttpServer(
         response.setHeader("Content-Type", "text/html; charset=utf-8");
         response.setHeader("Content-Security-Policy", SITE_CSP);
         response.setHeader("Referrer-Policy", "same-origin");
-        response.end(
+        await sendPage(
+          version,
+          session.id,
+          session.path,
           rebaseNavigation(version.servedHtml, session.path, `http://${host}`),
         );
         return;
@@ -547,7 +667,7 @@ export function createHttpServer(
           response.setHeader("Content-Type", "text/html; charset=utf-8");
           response.setHeader("Content-Security-Policy", SITE_CSP);
           response.setHeader("Referrer-Policy", "same-origin");
-          response.end(version.servedHtml);
+          await sendPage(version, session.id, session.path, version.servedHtml);
           return;
         }
         if (eligibleNavigation(request, route)) {
@@ -585,7 +705,11 @@ export function createHttpServer(
             harness.config.apiKey,
           ),
         },
-        (error as NodeJS.ErrnoException).code === "ENOENT" ? 404 : 400,
+        error instanceof StaleInteraction
+          ? 409
+          : (error as NodeJS.ErrnoException).code === "ENOENT"
+            ? 404
+            : 400,
       );
     }
   });
@@ -593,7 +717,10 @@ export function createHttpServer(
 
 // One server per data directory; a live PID is never displaced. Stale locks
 // from a crashed process can be reclaimed, but old session data is retained.
-export async function serve(harness: Harness) {
+export async function serve(
+  harness: Harness,
+  interactionDriver?: InteractionDriver,
+) {
   const collisions = (await harness.store.sessions()).filter(
     (s) => !s.archived && /^\/(_archive|_settings)(\/|$)/.test(s.path),
   );
@@ -620,7 +747,11 @@ export async function serve(harness: Harness) {
     await writeFile(lock, String(process.pid), { flag: "wx", mode: 0o600 });
   }
   const automatic = new AutomaticPages(harness);
-  const server = createHttpServer(harness, automatic);
+  const server = createHttpServer(
+    harness,
+    automatic,
+    new Interactions(harness, interactionDriver),
+  );
   try {
     await harness.store.recoverInterrupted();
     await automatic.initialize();

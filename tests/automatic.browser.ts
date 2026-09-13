@@ -78,7 +78,11 @@ test("automatic landing, click referrer, retry, backend controls and mobile layo
   ).toBeVisible();
   await expect(page.locator("#preview")).toHaveAttribute(
     "sandbox",
-    "allow-same-origin",
+    "allow-same-origin allow-scripts",
+  );
+  const staticPreview = await page.request.get("/browser-auto/preview");
+  expect(staticPreview.headers()["content-security-policy"]).toContain(
+    "script-src 'none'",
   );
   const previewRecords = await (
     await page.request.get("/api/automatic")

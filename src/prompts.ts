@@ -6,6 +6,8 @@ export const PROMPT_NAMES = [
   "initial-generation.md",
   "edit-generation.md",
   "assets.md",
+  "regions.md",
+  "interaction.md",
   "style-decision.md",
   "population.md",
   "page-description.md",

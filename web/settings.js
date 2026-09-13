@@ -53,7 +53,7 @@ async function load() {
     notice.textContent =
       "Model catalog unavailable; saved choices remain visible and will be checked on save.";
   }
-  for (const prefix of ["website", "description"])
+  for (const prefix of ["website", "description", "interaction"])
     options(
       field(`${prefix}Model`),
       data.models.map((m) => [m.id, m.label]),
@@ -70,7 +70,7 @@ async function load() {
     if (typeof value === "boolean") field(key).checked = value;
     else field(key).value = value;
   }
-  for (const prefix of ["website", "description"])
+  for (const prefix of ["website", "description", "interaction"])
     efforts(prefix, saved[`${prefix}Effort`]);
   dependencies();
   document.getElementById("knowledge-location").textContent =
@@ -109,7 +109,7 @@ form.onsubmit = async (event) => {
     button.disabled = false;
   }
 };
-for (const prefix of ["website", "description"])
+for (const prefix of ["website", "description", "interaction"])
   field(`${prefix}Model`).onchange = () =>
     efforts(prefix, field(`${prefix}Effort`).value);
 field("descriptionEnabled").onchange = dependencies;

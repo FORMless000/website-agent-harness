@@ -67,6 +67,7 @@ export function resolveStyle(
       schemaVersion: 1,
       html: submitted.html,
       css: resolvedCss,
+      ...(submitted.regions ? { regions: submitted.regions } : {}),
     }),
     style: {
       mode,

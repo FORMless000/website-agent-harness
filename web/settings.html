@@ -12,8 +12,8 @@
       <a href="/_harness/">← Website laboratory</a>
       <h1>Automatic generation</h1>
       <p>
-        Settings for unexplored URLs. Changes apply to new attempts; manual
-        tasks keep their own choices.
+        Page generation settings apply to new automatic attempts. Interaction
+        settings apply to new visits on all generated pages.
       </p>
     </header>
     <main>
@@ -43,6 +43,21 @@
               ><label
                 >Reasoning effort<select name="descriptionEffort"></select
               ></label>
+            </fieldset>
+            <fieldset>
+              <legend>Interaction model</legend>
+              <label>Model<select name="interactionModel"></select></label
+              ><label
+                >Reasoning effort<select name="interactionEffort"></select
+              ></label>
+              <label class="check"
+                ><input name="interactionJavascript" type="checkbox" />Allow
+                JavaScript in newly generated regions</label
+              >
+              <p>
+                The JavaScript preference applies to manual and automatic
+                generation.
+              </p>
             </fieldset>
           </div>
         </fieldset>

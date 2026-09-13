@@ -14,6 +14,7 @@ import {
 } from "./settings.js";
 
 export interface AutomaticAttempt {
+  destinationDescription?: string;
   id: string;
   path: string;
   status: "running" | "success" | "failed";
@@ -194,6 +195,7 @@ export class AutomaticPages {
     pagePath: string,
     referringUrl: string | null,
     retryId?: string,
+    destinationDescription = "",
   ): Promise<AutomaticAttempt | null> {
     pagePath = normalizePath(pagePath);
     await this.initialize();
@@ -236,6 +238,10 @@ export class AutomaticPages {
       internalReference: null,
       referenceReason: "pending",
       settings,
+      destinationDescription:
+        previous?.status === "failed"
+          ? previous.destinationDescription
+          : destinationDescription,
       warnings: [],
     };
     this.latest.set(pagePath, record);
@@ -315,7 +321,7 @@ export class AutomaticPages {
             const started = await h.populations.start(
               {
                 path: record.path,
-                description: "",
+                description: record.destinationDescription ?? "",
                 internalReference: record.internalReference,
                 allowReferenceSuggestions: false,
                 searchEnabled: record.settings.searchEnabled,
@@ -351,7 +357,7 @@ export class AutomaticPages {
         const created = await h.create(
           {
             path: record.path,
-            description: "",
+            description: record.destinationDescription ?? "",
             populatedBrief,
             populationId,
             model: record.settings.websiteModel,

@@ -749,8 +749,9 @@ const populationUI = initializePopulation(
   () => catalog,
 );
 
-// The preview remains script-disabled. The trusted parent can follow its loading
-// shell and provide an ordinary Open page action without relaxing that sandbox.
+// Static previews remain script-disabled by their response CSP. Interactive
+// previews permit only the trusted region bridge; generated code is isolated
+// inside opaque child frames. The parent also follows loading shells.
 let previewNavigation = 0;
 let previewClock;
 $("preview").addEventListener("load", () => {
